@@ -51,7 +51,7 @@ export function ShipmentCard({ order, copyBlock, canCreate, canTrack, onlineSube
   return (
     <div className="space-y-4">
       {!closed && (
-        <div className="grid gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Desi"><input value={desi} onChange={(e) => setDesi(e.target.value)} inputMode="decimal" className="input" /></Field>
           <Field label="Parça"><input type="number" min={1} value={pkg} onChange={(e) => setPkg(e.target.value)} className="input" /></Field>
           <Field label="Kargo ücreti (₺)"><input value={fee} onChange={(e) => setFee(e.target.value)} inputMode="decimal" className="input" /></Field>
@@ -60,12 +60,12 @@ export function ShipmentCard({ order, copyBlock, canCreate, canTrack, onlineSube
               {(Object.keys(SHIPPING_PAYERS) as ShippingPayer[]).map((k) => <option key={k} value={k}>{SHIPPING_PAYERS[k]}</option>)}
             </select>
           </Field>
-          <div className="sm:col-span-4 flex flex-wrap items-end gap-2">
+          <div className="col-span-2 flex flex-wrap items-end gap-2 sm:col-span-4">
             <Field label="Desi hesapla (cm)">
               <div className="flex gap-1.5">
-                <input placeholder="En" value={dims.w} onChange={(e) => setDims({ ...dims, w: e.target.value })} className="input w-20" />
-                <input placeholder="Boy" value={dims.l} onChange={(e) => setDims({ ...dims, l: e.target.value })} className="input w-20" />
-                <input placeholder="Yük." value={dims.h} onChange={(e) => setDims({ ...dims, h: e.target.value })} className="input w-20" />
+                <input placeholder="En" value={dims.w} onChange={(e) => setDims({ ...dims, w: e.target.value })} inputMode="decimal" className="input w-16 px-2 sm:w-20" />
+                <input placeholder="Boy" value={dims.l} onChange={(e) => setDims({ ...dims, l: e.target.value })} inputMode="decimal" className="input w-16 px-2 sm:w-20" />
+                <input placeholder="Yük." value={dims.h} onChange={(e) => setDims({ ...dims, h: e.target.value })} inputMode="decimal" className="input w-16 px-2 sm:w-20" />
                 <button onClick={calc} className="btn btn-sm">=</button>
               </div>
             </Field>

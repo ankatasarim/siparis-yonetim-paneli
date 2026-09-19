@@ -7,12 +7,12 @@ export function Card({ title, actions, children, className = '', pad = true, id 
   return (
     <section id={id} className={`card ${className}`}>
       {title !== undefined && (
-        <header className="flex items-center justify-between gap-3 border-b border-neutral-100 px-5 py-3.5">
-          <h2 className="flex items-center gap-2 text-[15px] font-semibold">{title}</h2>
-          {actions && <div className="flex items-center gap-2">{actions}</div>}
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 px-4 py-3 sm:px-5 sm:py-3.5">
+          <h2 className="flex min-w-0 flex-wrap items-center gap-2 text-[15px] font-semibold">{title}</h2>
+          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </header>
       )}
-      <div className={pad ? 'px-5 py-4' : ''}>{children}</div>
+      <div className={pad ? 'px-4 py-4 sm:px-5' : ''}>{children}</div>
     </section>
   );
 }

@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SESSION_COOKIE, verifySessionToken } from '@/lib/session';
 
+/**
+ * Tüm panel ve API istekleri oturum ister. PANEL_PASSWORD tanımlı değilse uygulama AÇILMAZ
+ * (giriş sayfası kurulum uyarısı gösterir); şifresiz açık panel yok.
+ */
 export async function middleware(req: NextRequest) {
-  const password = process.env.PANEL_PASSWORD || '';
-  if (!password) return NextResponse.next();
-  const secret = process.env.SESSION_SECRET || 'anka-dev-secret-lutfen-degistirin';
-  const ok = await verifySessionToken(secret, req.cookies.get(SESSION_COOKIE)?.value);
-  if (ok) return NextResponse.next();
   const { pathname } = req.nextUrl;
-  if (pathname.startsWith('/api/')) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
+  const password = process.env.PANEL_PASSWORD || '';
+  const secret = process.env.SESSION_SECRET || 'anka-dev-secret-lutfen-degistirin';
+  const ok = password ? await verifySessionToken(secret, req.cookies.get(SESSION_COOKIE)?.value) : false;
+  if (ok) return NextResponse.next();
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.json({ error: password ? 'Giriş gerekli' : 'PANEL_PASSWORD tanımlı değil' }, { status: password ? 401 : 503 });
+  }
   const url = new URL('/giris', req.url);
   if (pathname !== '/') url.searchParams.set('next', pathname);
   return NextResponse.redirect(url);

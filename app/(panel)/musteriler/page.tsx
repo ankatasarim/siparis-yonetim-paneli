@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
-import { Instagram, Users } from 'lucide-react';
+import { Instagram, Users, ChevronRight } from 'lucide-react';
 import { ready, customers } from '@/lib/services';
 import { PageHeader } from '@/components/PageHeader';
 import { SearchBox } from '@/components/SearchBox';
@@ -15,8 +15,26 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   return (
     <>
       <PageHeader title="Müşteriler" info="Instagram'dan yazan herkes otomatik müşteri olarak eklenir." actions={<Link href="/musteriler/yeni" className="btn btn-primary">Müşteri Oluştur</Link>} />
-      <div className="mb-4"><Suspense><SearchBox placeholder="İsim, telefon, @instagram, şehir…" className="max-w-xs" /></Suspense></div>
-      <div className="card overflow-hidden">
+      <div className="mb-4"><Suspense><SearchBox placeholder="İsim, telefon, @instagram, şehir…" className="w-full max-w-xs" /></Suspense></div>
+
+      {/* Mobil: kart listesi */}
+      <div className="space-y-3 md:hidden">
+        {list.map((c) => (
+          <Link key={c.id} href={`/musteriler/${c.id}`} className="card flex items-center gap-3 px-4 py-3">
+            <Avatar name={c.name || c.ig_username} src={c.profile_pic} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{c.name || <span className="text-neutral-400">isimsiz</span>}{c.unread > 0 && <span className="ml-2 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-white">{c.unread}</span>}</p>
+              <p className="truncate text-xs text-neutral-500">{[c.phone, c.ig_username ? '@' + c.ig_username : '', [c.district, c.city].filter(Boolean).join(' / ')].filter(Boolean).join(' · ') || '—'}</p>
+              <p className="text-xs text-neutral-500">{c.order_count} sipariş · {money(c.total_spent)}</p>
+            </div>
+            <ChevronRight className="h-4 w-4 shrink-0 text-neutral-400" />
+          </Link>
+        ))}
+        {!list.length && <div className="card"><Empty icon={<Users className="mx-auto h-8 w-8 text-neutral-300" />} title="Müşteri bulunamadı" /></div>}
+      </div>
+
+      {/* Masaüstü: tablo */}
+      <div className="card hidden overflow-hidden md:block">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px]">
             <thead><tr><th className="th">Müşteri</th><th className="th">Instagram</th><th className="th">Telefon</th><th className="th">Konum</th><th className="th">Sipariş</th><th className="th">Toplam</th><th className="th">Son sipariş</th></tr></thead>

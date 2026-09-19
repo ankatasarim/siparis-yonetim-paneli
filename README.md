@@ -1,6 +1,6 @@
 # 🪶 Anka Tasarım · Sipariş Takip Paneli
 
-Instagram'dan gelen siparişleri tek panelden yönetmek için hazırlanmış, ikas tarzı arayüze sahip, **Next.js + Tailwind** ile yazılmış sipariş takip uygulaması. Veriler **Supabase**'de (REST API ile okunup yazılır), uygulama **Vercel**'de çalışır; ikisi de ücretsiz planla yeter. Instagram mesajlaşma ve DHL eCommerce ile entegre.
+Instagram'dan gelen siparişleri tek panelden yönetmek için hazırlanmış, **Next.js + Tailwind** ile yazılmış sipariş takip uygulaması. Veriler **Supabase**'de (REST API ile okunup yazılır), uygulama **Vercel**'de çalışır; ikisi de ücretsiz planla yeter. Instagram mesajlaşma ve DHL eCommerce ile entegre.
 
 **Akış:** Instagram'dan sipariş → Hazırlık → DHL kargo kaydı → Müşteriye "kargoya verildi" mesajı (otomatik) → Teslim → Memnuniyet sorusu (tek tıkla) → Cevaba göre siparişi kapatma (otomatik)
 
@@ -35,8 +35,9 @@ Geliştirme için `npm run dev`. Testler: `npm test` (bellek içi depo, internet
 ### 1) Supabase: tablolar ve anahtar
 1. https://supabase.com → projeniz (bölge Avrupa önerilir).
 2. **SQL Editor › New query** → [supabase/schema.sql](supabase/schema.sql) dosyasının tamamını yapıştırın → **Run**. Tablolar, güvenlik kuralları (RLS) ve yedek kovası oluşur. Bir kez yapılır.
-3. **Project Settings › API Keys › Secret keys** → bir gizli anahtar oluşturun/kopyalayın (`sb_secret_...`). Bu `SUPABASE_SECRET_KEY` olacak. **Project Settings › Data API › Project URL** = `SUPABASE_URL`.
-   - Herkese açık "publishable" anahtar bu uygulamada kullanılmaz; tablolar RLS ile korunduğu için o anahtarla hiçbir veri okunamaz.
+3. **Project Settings › Data API › Project URL** = `SUPABASE_URL`. Anahtar için iki seçenek:
+   - **Publishable anahtar** (`sb_publishable_...`, Project Settings › API Keys) → `SUPABASE_PUBLISHABLE_KEY`. `schema.sql` bu anahtara tablo erişimi verir. Anahtar herkese açık sayıldığından proje klasörünü paylaşırken `.env` dosyasını dışarıda tutun.
+   - **Gizli anahtar** (`sb_secret_...`, Secret keys sekmesi) → `SUPABASE_SECRET_KEY`. Daha güvenli; girildiğinde publishable anahtar kullanılmaz ve `schema.sql` içindeki `anka_anon_*` politikalarını silebilirsiniz.
 4. İsterseniz önce yerelde deneyin: `.env` içine iki değeri yazıp `npm run build && npm start`. Oluşturduğunuz siparişler Supabase › Table Editor'da görünmeli.
 
 ### 2) Vercel'e yayın
@@ -49,8 +50,8 @@ Vercel panelinde **Settings › Environment Variables** (Production):
 | Değişken | Değer |
 |---|---|
 | `SUPABASE_URL` | Project URL |
-| `SUPABASE_SECRET_KEY` | gizli anahtar |
-| `PANEL_PASSWORD` | güçlü bir şifre |
+| `SUPABASE_PUBLISHABLE_KEY` veya `SUPABASE_SECRET_KEY` | Supabase anahtarı |
+| `PANEL_PASSWORD` | güçlü bir şifre (**zorunlu**; tanımsızsa panel açılmaz) |
 | `SESSION_SECRET` | rastgele uzun metin |
 | `CRON_SECRET` | rastgele uzun metin |
 | `BASE_URL` | `https://uygulama-adi.vercel.app` |

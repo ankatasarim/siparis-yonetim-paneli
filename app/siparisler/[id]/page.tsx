@@ -56,16 +56,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </>}
       />
 
-      <div className="mx-auto grid max-w-6xl gap-5 px-4 py-6 md:px-6 lg:grid-cols-[minmax(0,1fr)_330px]">
-        <div className="space-y-5">
-          <Card pad={false} title={<><StatusPill status={o.status} />{STATUSES[o.status].label} <span className="font-normal text-neutral-500">({count} ürün)</span></>} actions={<span className="text-xs text-neutral-500">Sipariş #{o.order_no}</span>}>
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-5 px-3 py-4 sm:px-4 sm:py-6 md:px-6 lg:grid-cols-[minmax(0,1fr)_330px]">
+        <div className="min-w-0 space-y-5">
+          <Card pad={false} title={<><StatusPill status={o.status} /><span className="hidden sm:inline">{STATUSES[o.status].label}</span> <span className="font-normal text-neutral-500">({count} ürün)</span></>} actions={<span className="hidden text-xs text-neutral-500 sm:inline">Sipariş #{o.order_no}</span>}>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[520px]">
-                <thead><tr><th className="th">Ürün</th><th className="th w-20 text-right">Adet</th><th className="th w-28 text-right">Fiyat</th><th className="th w-32 text-right">Toplam Tutar</th></tr></thead>
+              <table className="w-full">
+                <thead><tr><th className="th">Ürün</th><th className="th w-14 text-right sm:w-20">Adet</th><th className="th w-24 text-right sm:w-28">Fiyat</th><th className="th w-24 text-right sm:w-32">Toplam</th></tr></thead>
                 <tbody>
                   {o.lines.map((l, i) => (
                     <tr key={i}>
-                      <td className="td"><div className="flex items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-neutral-50 text-lg">🎨</div><span className="font-medium">{l.name}</span></div></td>
+                      <td className="td"><div className="flex items-center gap-3"><div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-neutral-50 text-lg sm:flex">🎨</div><span className="font-medium">{l.name}</span></div></td>
                       <td className="td text-right">{l.qty}</td>
                       <td className="td text-right">{l.price != null ? money(l.price) : <span className="text-neutral-400">—</span>}</td>
                       <td className="td text-right font-medium">{l.price != null ? money(l.qty * l.price) : <span className="text-neutral-400">—</span>}</td>
@@ -105,7 +105,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </Card>
         </div>
 
-        <aside className="space-y-5">
+        <aside className="min-w-0 space-y-5">
           <Card title="Sipariş Özeti">
             <p className="text-sm">{fmtDate(o.created_at)}</p>
             <p className="mt-1 flex items-center gap-1.5 text-sm"><Instagram className="h-4 w-4 text-pink-600" />Instagram</p>

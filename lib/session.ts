@@ -1,6 +1,6 @@
 /** Web Crypto tabanlı oturum imzası – hem Node hem Edge (middleware) çalışma zamanında çalışır. */
 export const SESSION_COOKIE = 'anka_session';
-export const SESSION_MAX_AGE = 30 * 86400; // 30 gün
+export const SESSION_MAX_AGE = 2 * 86400; // 2 gün
 
 async function hmacHex(secret: string, payload: string): Promise<string> {
   const enc = new TextEncoder();

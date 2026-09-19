@@ -120,7 +120,8 @@ begin
   perform setval(pg_get_serial_sequence('public.messages', 'id'), coalesce((select max(id) from public.messages), 0) + 1, false);
   perform setval(pg_get_serial_sequence('public.order_events', 'id'), coalesce((select max(id) from public.order_events), 0) + 1, false);
 end $$;
-revoke all on function public.reset_sequences() from public, anon, authenticated;
+revoke all on function public.reset_sequences() from public, authenticated;
+grant execute on function public.reset_sequences() to anon, service_role;
 
 -- Yedek dosyaları için özel Storage kovası (yoksa uygulama da oluşturabilir)
 insert into storage.buckets (id, name, public) values ('yedek', 'yedek', false) on conflict (id) do nothing;

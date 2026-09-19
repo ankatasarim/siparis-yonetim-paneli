@@ -3,7 +3,9 @@ import { cfg } from '@/lib/config';
 import { createSessionToken, passwordMatches, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
 
 export async function POST(req: NextRequest) {
-  if (!cfg.panelPassword) return NextResponse.json({ ok: true, auth_required: false });
+  if (!cfg.panelPassword) {
+    return NextResponse.json({ error: 'Panel şifresi tanımlanmamış. PANEL_PASSWORD ve SESSION_SECRET ortam değişkenlerini ekleyip yeniden yayınlayın.' }, { status: 503 });
+  }
   const b = await req.json().catch(() => ({}));
   if (b.password && (await passwordMatches(String(b.password), cfg.panelPassword))) {
     const res = NextResponse.json({ ok: true });
