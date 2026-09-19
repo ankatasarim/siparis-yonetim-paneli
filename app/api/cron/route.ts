@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization') || '';
   const given = auth.startsWith('Bearer ') ? auth.slice(7).trim() : req.nextUrl.searchParams.get('secret') || '';
   if (!given || !(await passwordMatches(given, cfg.cronSecret))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 401 });
+  if (!cfg.automation.enabled) return NextResponse.json({ ok: true, skipped: 'Otomasyon kapalı (AUTOMATION_ENABLED=false)' });
   try {
     await ready();
     const result = await automation.runAll();

@@ -81,6 +81,64 @@ export async function refreshToken(): Promise<{ access_token?: string; expires_i
   return data;
 }
 
+export interface IgParticipant { id: string; username?: string }
+export interface IgConversation { id: string; updated_time?: string; participants?: { data: IgParticipant[] } }
+export interface IgMessage {
+  id: string;
+  created_time: string;
+  from?: IgParticipant;
+  to?: { data: IgParticipant[] };
+  message?: string;
+  attachments?: { data?: Array<{ id?: string; mime_type?: string; name?: string; file_url?: string; image_data?: { url?: string }; video_data?: { url?: string } }> };
+}
+
+/** Kendi hesabımız: id, user_id (profesyonel hesap kimliği) ve kullanıcı adı. */
+export async function meFull(): Promise<{ id: string; user_id?: string; username?: string; name?: string }> {
+  const p = new URLSearchParams({ fields: 'id,user_id,username,name', access_token: await token() });
+  return call(`${cfg.instagram.apiBase}/me?${p}`);
+}
+
+/** Son sohbetler (Conversations API). */
+export async function listConversations(limit = 20): Promise<IgConversation[]> {
+  const p = new URLSearchParams({ platform: 'instagram', fields: 'id,updated_time,participants', limit: String(limit), access_token: await token() });
+  const r = await call<{ data?: IgConversation[] }>(`${cfg.instagram.apiBase}/me/conversations?${p}`);
+  return r.data || [];
+}
+
+/** Bir sohbetin son mesajları (Meta yalnızca son 20 mesajın içeriğini verir). */
+export async function listMessages(conversationId: string, limit = 20): Promise<IgMessage[]> {
+  const fields = 'id,created_time,from,to,message,attachments';
+  try {
+    const p = new URLSearchParams({ fields, limit: String(limit), access_token: await token() });
+    const r = await call<{ data?: IgMessage[] }>(`${cfg.instagram.apiBase}/${conversationId}/messages?${p}`);
+    return r.data || [];
+  } catch {
+    // Yedek yol: önce kimlikler, sonra tek tek içerik
+    const p = new URLSearchParams({ fields: 'messages', access_token: await token() });
+    const r = await call<{ messages?: { data?: { id: string; created_time: string }[] } }>(`${cfg.instagram.apiBase}/${conversationId}?${p}`);
+    const ids = (r.messages?.data || []).slice(0, limit);
+    const out: IgMessage[] = [];
+    for (const m of ids) {
+      try {
+        const q = new URLSearchParams({ fields, access_token: await token() });
+        out.push(await call<IgMessage>(`${cfg.instagram.apiBase}/${m.id}?${q}`));
+      } catch { /* eski mesajların içeriği verilmez */ }
+    }
+    return out;
+  }
+}
+
+/** Hesabı webhook alanlarına abone eder (anlık bildirim istenirse; düğmeyle çekme için gerekmez). */
+export async function subscribeWebhooks(): Promise<{ success?: boolean }> {
+  const p = new URLSearchParams({ subscribed_fields: 'messages,messaging_postbacks,messaging_seen', access_token: await token() });
+  return call(`${cfg.instagram.apiBase}/me/subscribed_apps?${p}`, { method: 'POST' });
+}
+
+export async function subscriptionStatus(): Promise<{ data?: { id?: string; name?: string; subscribed_fields?: string[] }[] }> {
+  const p = new URLSearchParams({ access_token: await token() });
+  return call(`${cfg.instagram.apiBase}/me/subscribed_apps?${p}`);
+}
+
 export function verifySignature(rawBody: string | Buffer, sigHeader?: string | null): boolean {
   if (!cfg.instagram.appSecret) return true; // secret tanımlı değilse doğrulama yapılmaz (geliştirme)
   if (!sigHeader || rawBody == null) return false;

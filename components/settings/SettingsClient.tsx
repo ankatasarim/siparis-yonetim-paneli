@@ -44,7 +44,9 @@ export function SettingsClient({ status: st, settings: s, outbox }: Props) {
           <div className="mt-3 flex flex-wrap gap-2">
             <button disabled={!ig.configured || busy === 'test'} onClick={() => act('test', async () => { const r = await api.post('/api/settings/instagram/test'); toast(`Bağlı: @${r.username || r.id} (${r.account_type || ''})`, 'ok'); })} className="btn btn-sm"><Plug className="h-3.5 w-3.5" />Bağlantıyı test et</button>
             <button disabled={!ig.configured || busy === 'refresh'} onClick={() => act('refresh', async () => { const r = await api.post('/api/settings/instagram/refresh'); toast(`Token yenilendi (${Math.round((r.expires_in || 0) / 86400)} gün)`, 'ok'); router.refresh(); })} className="btn btn-sm"><RefreshCw className="h-3.5 w-3.5" />Token'ı yenile</button>
+            <button disabled={!ig.configured || busy === 'sub'} onClick={() => act('sub', async () => { const r = await api.post('/api/settings/instagram/subscribe'); toast(r.ok ? `Webhook aboneliği tamam (${(r.fields || []).join(', ') || 'messages'})` : 'Abonelik yanıtı olumsuz', r.ok ? 'ok' : 'err'); })} className="btn btn-sm"><Bell className="h-3.5 w-3.5" />Webhook'a abone ol</button>
           </div>
+          <p className="mt-2 text-xs text-neutral-500">Gelen mesajlar için sıra: Meta panelinde webhook adresini kaydedin → burada "Webhook'a abone ol" → test kullanıcısı DM atsın.</p>
           <Field label="Erişim token'ı yapıştır (Meta panelinden aldığınız uzun ömürlü token)" className="mt-3">
             <div className="flex gap-2"><input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="IGQ…" className="input" /><button disabled={!token.trim() || busy === 'token'} onClick={() => act('token', async () => { await api.post('/api/settings/instagram/token', { access_token: token.trim() }); setToken(''); toast('Token kaydedildi', 'ok'); router.refresh(); })} className="btn btn-sm">Kaydet</button></div>
           </Field>
@@ -79,7 +81,7 @@ export function SettingsClient({ status: st, settings: s, outbox }: Props) {
                   <code className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs">{cron.url}?secret=••••••</code>
                   <button onClick={() => copy(cronUrl)} className="btn btn-xs"><Copy className="h-3 w-3" />Adresi kopyala</button>
                 </div>
-                <p className="mt-1 text-xs text-neutral-500">cron-job.org'da yeni görev: bu adres, her 30 dakikada bir. Vercel'de ayrıca günlük yedek cron'u otomatik tanımlıdır.</p>
+                <p className="mt-1 text-xs text-neutral-500">{st.automation.enabled ? "cron-job.org'da yeni görev: bu adres, her 30 dakikada bir." : 'Otomasyon kapalı: bu adres çağrılsa da iş yapmaz. Açmak için AUTOMATION_ENABLED=true.'}</p>
               </>
             ) : <span className="text-red-600">CRON_SECRET tanımlı değil · .env / Vercel ortam değişkenlerine ekleyin</span>}
           </dd>
@@ -148,7 +150,7 @@ export function SettingsClient({ status: st, settings: s, outbox }: Props) {
         <dl className="kv">
           <dt>Node</dt><dd>{st.node_version}{st.is_vercel ? ' · Vercel' : ''}</dd>
           <dt>Panel şifresi</dt><dd>{st.panel_password_set ? 'aktif' : <span className="text-red-600">tanımlı değil · PANEL_PASSWORD ekleyin</span>}</dd>
-          <dt>Otomasyon</dt><dd>{st.is_vercel ? 'cron ile (yukarıdaki adres)' : st.automation.enabled ? `sunucu içi zamanlayıcı · kargo sorgusu ${st.automation.trackPollMinutes} dk` : 'kapalı'} · cevapsız memnuniyet {st.automation.satisfactionAutoCloseDays} gün sonra kapanır</dd>
+          <dt>Otomasyon</dt><dd>{!st.automation.enabled ? 'kapalı · dışarıya otomatik istek atılmaz; yedek ve kargo sorgusu yalnızca elle ("İşleri şimdi çalıştır")' : st.is_vercel ? 'cron ile (yukarıdaki adres)' : `sunucu içi zamanlayıcı · kargo sorgusu ${st.automation.trackPollMinutes} dk`}</dd>
           <dt>Adres</dt><dd className="font-mono text-xs">{st.base_url}</dd>
         </dl>
       </Card>

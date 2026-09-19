@@ -36,7 +36,16 @@ async function fetchProfile(customerId: number, igsid: string): Promise<void> {
   }
 }
 
-export async function handleMessage(ev: instagram.WebhookMessage): Promise<Message | null> {
+export interface HandleOptions {
+  /** Eski mesajları okunmuş kaydet (ilk senkronizasyon) */
+  markRead?: boolean;
+  /** Karşı tarafın kullanıcı adı biliniyorsa (profil isteği atılmaz) */
+  username?: string | null;
+  /** Memnuniyet cevabı / tekrar gönderim gibi yan etkileri atla (eski mesajlar için) */
+  skipSideEffects?: boolean;
+}
+
+export async function handleMessage(ev: instagram.WebhookMessage, opts: HandleOptions = {}): Promise<Message | null> {
   if (ev.isDeleted || !ev.mid) return null;
   const dup = await db.store().select<{ id: number }>({ table: 'messages', columns: ['id'], where: [eq('ig_mid', ev.mid)], limit: 1 });
   if (dup.rows.length) return null; // zaten kayıtlı (kendi gönderimimizin yankısı vb.)
@@ -45,7 +54,8 @@ export async function handleMessage(ev: instagram.WebhookMessage): Promise<Messa
 
   let customer = await customers.findByIg(igsid);
   const isNew = !customer;
-  if (!customer) customer = await customers.upsertByIg(igsid, {});
+  if (!customer) customer = await customers.upsertByIg(igsid, { username: opts.username || null });
+  else if (opts.username && !customer.ig_username) customer = await customers.update(customer.id, { ig_username: opts.username });
 
   const msg = await messaging.saveMessage({
     customer_id: customer.id,
@@ -55,13 +65,13 @@ export async function handleMessage(ev: instagram.WebhookMessage): Promise<Messa
     ig_mid: ev.mid,
     status: 'ok',
     kind: ev.isEcho ? 'instagram' : null,
-    is_read: ev.isEcho ? 1 : 0,
+    is_read: ev.isEcho || opts.markRead ? 1 : 0,
     created_at: new Date(ev.timestamp || Date.now()).toISOString(),
   });
 
   if (isNew || !customer.ig_username) await fetchProfile(customer.id, igsid);
 
-  if (!ev.isEcho) {
+  if (!ev.isEcho && !opts.skipSideEffects) {
     const awaiting = await orders.findAwaitingSatisfaction(customer.id);
     if (awaiting && ev.text) {
       await orders.recordSatisfactionReply(awaiting.id, ev.text);
@@ -86,6 +96,58 @@ export async function processWebhook(body: unknown): Promise<Message[]> {
     }
   }
   return results;
+}
+
+function parseIgAttachments(m: instagram.IgMessage): { type: string; url: string | null }[] {
+  return (m.attachments?.data || []).map((a) => ({
+    type: a.image_data ? 'image' : a.video_data ? 'video' : a.file_url ? 'file' : 'attachment',
+    url: a.image_data?.url || a.video_data?.url || a.file_url || null,
+  }));
+}
+
+/**
+ * Instagram'daki son sohbetleri Conversations API ile çeker ve Gelen Kutusu'na işler (webhook gerekmez).
+ * İlk çekimde eski mesajlar okunmuş kaydedilir; sonraki çekimlerde son çekimden yeni olanlar okunmamış görünür.
+ */
+export async function syncFromInstagram(opts: { conversations?: number; messages?: number } = {}): Promise<{ conversations: number; messages_seen: number; new_messages: number; last_sync_at: string }> {
+  if (!(await instagram.isConfigured())) throw httpError(400, "Instagram erişim token'ı tanımlı değil");
+  const me = await instagram.meFull();
+  const myIds = new Set([me.id, me.user_id].filter(Boolean).map(String));
+  const myUser = (me.username || '').toLowerCase();
+  const isMe = (p?: instagram.IgParticipant | null) => Boolean(p && (myIds.has(String(p.id)) || (p.username || '').toLowerCase() === myUser));
+  const lastSync = await db.getSetting('ig_last_sync_at');
+  const convs = await instagram.listConversations(opts.conversations ?? 20);
+  let seen = 0, added = 0;
+  for (const conv of convs) {
+    const other = (conv.participants?.data || []).find((p) => !isMe(p)) || null;
+    let msgs: instagram.IgMessage[] = [];
+    try { msgs = await instagram.listMessages(conv.id, opts.messages ?? 20); }
+    catch (e) { console.warn('[instagram] sohbet okunamadı', conv.id, (e as Error).message); continue; }
+    for (const m of [...msgs].reverse()) { // eskiden yeniye
+      seen += 1;
+      const fromMe = isMe(m.from);
+      const otherParty = fromMe ? (m.to?.data || []).find((p) => !isMe(p)) || other : m.from || other;
+      if (!otherParty?.id) continue;
+      const ts = Date.parse(m.created_time) || Date.now();
+      const isNew = !lastSync || ts > Date.parse(lastSync);
+      const ev: instagram.WebhookMessage = {
+        type: 'message',
+        senderId: fromMe ? String(me.user_id || me.id) : String(otherParty.id),
+        recipientId: fromMe ? String(otherParty.id) : String(me.user_id || me.id),
+        timestamp: ts,
+        mid: m.id,
+        text: m.message || '',
+        attachments: parseIgAttachments(m),
+        isEcho: fromMe,
+        isDeleted: false,
+      };
+      const saved = await handleMessage(ev, { markRead: !isNew, username: otherParty.username || null, skipSideEffects: !isNew });
+      if (saved) added += 1;
+    }
+  }
+  const at = new Date().toISOString();
+  await db.setSetting('ig_last_sync_at', at);
+  return { conversations: convs.length, messages_seen: seen, new_messages: added, last_sync_at: at };
 }
 
 /** Instagram bağlantısı olmadan akışı denemek için sahte gelen mesaj üretir. */

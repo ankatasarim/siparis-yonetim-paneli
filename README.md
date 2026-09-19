@@ -2,7 +2,9 @@
 
 Instagram'dan gelen siparişleri tek panelden yönetmek için hazırlanmış, **Next.js + Tailwind** ile yazılmış sipariş takip uygulaması. Veriler **Supabase**'de (REST API ile okunup yazılır), uygulama **Vercel**'de çalışır; ikisi de ücretsiz planla yeter. Instagram mesajlaşma ve DHL eCommerce ile entegre.
 
-**Akış:** Instagram'dan sipariş → Hazırlık → DHL kargo kaydı → Müşteriye "kargoya verildi" mesajı (otomatik) → Teslim → Memnuniyet sorusu (tek tıkla) → Cevaba göre siparişi kapatma (otomatik)
+**Akış:** Instagram'dan sipariş → Hazırlık → DHL kargo kaydı → Müşteriye "kargoya verildi" mesajı (tek tıkla) → Teslim → Memnuniyet sorusu (tek tıkla) → Kapanış
+
+> Varsayılan ayarlarda uygulama **hiçbir yere kendiliğinden istek atmaz**: Instagram mesajları düğmeyle çekilir, müşteri mesajları yalnızca siz "Gönder" deyince gider, DHL sorgusu ve yedek yükleme yalnızca elle tetiklenir.
 
 ## Neler var?
 
@@ -10,10 +12,10 @@ Instagram'dan gelen siparişleri tek panelden yönetmek için hazırlanmış, **
 - **Siparişler:** ikas'taki gibi tablo, arama, durum ve ödeme filtreleri, sayfalama, CSV dışa aktarma. Durum rozetine tıklayınca detaya girmeden durum değiştirilir (kargoya verirken takip numarası sorulur).
 - **Sipariş detayı:** Siyah üst barlı tam ekran sayfa; ürün tablosu, müşteri ve sevkiyat adresi, zaman çizelgesi + iç yorumlar, sağda sipariş özeti, ödeme, durum işlemleri, memnuniyet ve bildirimler.
 - **Sipariş oluşturma:** Ürün satırları, kayıtlı müşteri arama veya yeni müşteri, etiket / kişiselleştirme notu, ödeme durumu ve yöntemi, kargo ücreti, desi, parça, kargo ödeyen.
-- **DHL kargo:** Manuel mod (Online Şube + takip numarası, hemen kullanılabilir), API modu (şubeden gelen bilgilerle), Unified Tracking API ile otomatik teslimat algılama.
-- **Gelen Kutusu:** Instagram DM'leri panele düşer (webhook), panelden cevap yazılır, mesajdan tek tıkla sipariş oluşturulur.
-- **Memnuniyet:** Teslim sonrası soruyu uygun gördüğünüzde tek tıkla gönderirsiniz (Ayarlar'dan otomatiğe alınabilir). Müşterinin cevabı otomatik işlenir.
-- **Ayarlar:** Entegrasyon durumu, yedek indirme, cron adresi, elle gönderilecek bildirimler, mesaj şablonları ve otomatik gönderim anahtarları, Instagram'sız test aracı.
+- **DHL kargo:** Manuel mod (Online Şube + takip numarası, hemen kullanılabilir), API modu (şubeden gelen bilgilerle), Unified Tracking API ile teslimat sorgusu (elle tetiklenir).
+- **Gelen Kutusu:** "Instagram'dan çek" düğmesi son DM'leri getirir ve listeler; panelden cevap yazılır, mesajdan tek tıkla sipariş oluşturulur.
+- **Memnuniyet:** Teslim sonrası soruyu uygun gördüğünüzde tek tıkla gönderirsiniz. Müşterinin cevabı çekildiğinde sınıflandırılır.
+- **Ayarlar:** Entegrasyon durumu, yedek indirme, cron adresi, elle gönderilecek bildirimler, mesaj şablonları ve otomatik gönderim anahtarları (varsayılan kapalı), Instagram'sız test aracı.
 
 ## Yerelde çalıştırma
 
@@ -58,17 +60,14 @@ Vercel panelinde **Settings › Environment Variables** (Production):
 | `ALLOW_SIMULATION` | `false` |
 | `IG_*`, `DHL_*` | ilgili bölümlere göre |
 
-Sonra `npx vercel --prod` ile yeniden yayınlayın. `vercel.json` içinde bölge Frankfurt (`fra1`) ve günlük cron tanımlıdır.
+Sonra `npx vercel --prod` ile yeniden yayınlayın. `vercel.json` yalnızca bölgeyi (Frankfurt, `fra1`) tanımlar; cron yoktur.
 
-### 3) 30 dakikalık cron (DHL takibi)
-Vercel'in ücretsiz planı cron'u günde bir çalıştırır. Kargo takibi için https://cron-job.org (ücretsiz) üzerinde görev açın:
-- Adres: Ayarlar sayfasındaki "Adresi kopyala" düğmesiyle alın (`https://.../api/cron?secret=...`)
-- Sıklık: her 30 dakika
-Aynı adres cevapsız memnuniyet kapatma, Instagram token yenileme ve günlük yedeği de çalıştırır. Ayarlar › "İşleri şimdi çalıştır" ile elle tetikleyebilirsiniz.
+### 3) Zamanlanmış işler (varsayılan: kapalı)
+Uygulama varsayılan olarak dışarıya otomatik istek atmaz (`AUTOMATION_ENABLED=false`): DHL sorgusu, Instagram token yenileme ve yedek yükleme yalnızca Ayarlar › "İşleri şimdi çalıştır" ile elle çalışır; Instagram mesajları Gelen Kutusu › "Instagram'dan çek" ile alınır. İleride otomatik istiyorsanız `AUTOMATION_ENABLED=true` yapın ve https://cron-job.org üzerinde Ayarlar'daki cron adresini 30 dakikada bir çağıran bir görev açın.
 
 ### Ücretsiz plan notları
-- **Yedek:** Supabase'in ücretsiz planında yedek yoktur. Uygulama her gün JSON yedeği Supabase Storage'daki `yedek` kovasına yükler (son 30 gün) ve Ayarlar'dan "Yedek indir" ile elle alabilirsiniz. Geri yükleme: `npm run restore -- yedek.json --evet` (mevcut verileri siler).
-- **Uyutma:** Supabase, 7 gün istek gelmezse projeyi uyutur. Günlük cron ve panel kullanımı bunu önler; yine de uyursa Supabase panelinden "Restore" ile uyandırılır, veri silinmez.
+- **Yedek:** Supabase'in ücretsiz planında yedek yoktur. Ayarlar › "Yedek indir" ile JSON yedeği elle alın; "İşleri şimdi çalıştır" düğmesi de bir kopyayı Supabase Storage'daki `yedek` kovasına yükler (son 30 gün). Geri yükleme: `npm run restore -- yedek.json --evet` (mevcut verileri siler).
+- **Uyutma:** Supabase, 7 gün istek gelmezse projeyi uyutur. Paneli haftada bir açmanız yeterlidir; yine de uyursa Supabase panelinden "Restore" ile uyandırılır, veri silinmez.
 - **Kapasite:** 500 MB veritabanı; sipariş başına birkaç KB. Yıllarca yeter.
 
 ## Günlük kullanım
@@ -76,9 +75,9 @@ Aynı adres cevapsız memnuniyet kapatma, Instagram token yenileme ve günlük y
 1. **Sipariş geldi:** Gelen Kutusu'nda müşterinin DM'ini açın → "Sipariş oluştur". Instagram bağlı değilse "Sipariş Oluştur" ile elle girin.
 2. **Ödeme:** Havale gelince "Ödeme alındı" deyin. Kapıda ödeme için ödeme durumunu "Kapıda Ödeme" seçin.
 3. **Hazırlık:** "Hazırlığa al". Koli hazır olunca desi / parça / kargo ödeyen bilgisini girin.
-4. **Kargo:** "Kopyala" ile alıcı bilgilerini alın, DHL Online Şube'de gönderiyi oluşturun, takip numarasını listeden veya detaydan girin. Müşteriye takip linkli mesaj otomatik gider.
-5. **Teslim:** Takip API'si varsa otomatik algılanır; yoksa "Teslim edildi" deyin.
-6. **Memnuniyet ve kapanış:** Uygun gördüğünüzde "Memnuniyet sorusunu gönder". Olumlu cevapta sipariş kendiliğinden kapanır; olumsuz cevaplar uyarı olarak görünür.
+4. **Kargo:** "Kopyala" ile alıcı bilgilerini alın, DHL Online Şube'de gönderiyi oluşturun, takip numarasını listeden veya detaydan girin. Bildirimler kartından takip linkli mesajı tek tıkla gönderin.
+5. **Teslim:** "Teslim edildi" deyin (Takip API'si tanımlıysa Ayarlar › "İşleri şimdi çalıştır" da algılar).
+6. **Memnuniyet ve kapanış:** Uygun gördüğünüzde "Memnuniyet sorusunu gönder". Olumlu cevap gelince sipariş kapanır; olumsuz cevaplar uyarı olarak görünür.
 
 Instagram'a gönderilemeyen mesajlar **Ayarlar › Elle gönderilmesi gereken bildirimler** listesine düşer; kopyalayıp elle gönderip "Elle gönderdim" diyebilirsiniz.
 
@@ -99,7 +98,7 @@ Meta'nın **Instagram API with Instagram Login** ürünü kullanılır. Gerekenl
 ## DHL eCommerce
 
 - **Manuel mod** (`DHL_MODE=manual`, varsayılan): Gönderiyi https://onlinesube.dhlecommerce.com.tr üzerinden siz oluşturursunuz.
-- **Takip:** https://developer.dhl.com "Shipment Tracking – Unified" anahtarını `DHL_TRACKING_API_KEY` olarak ekleyin; cron her çalıştığında kargodaki siparişler sorgulanır.
+- **Takip:** https://developer.dhl.com "Shipment Tracking – Unified" anahtarını `DHL_TRACKING_API_KEY` olarak ekleyin; Ayarlar › "İşleri şimdi çalıştır" ile kargodaki siparişler sorgulanır.
 - **API modu:** Şubenizden web servis bilgilerini alınca `DHL_MODE=api` ve `DHL_API_*` değişkenleri; alan adlarını [lib/integrations/dhl/api.ts](lib/integrations/dhl/api.ts) içinde uyarlayın.
 
 ## Proje yapısı
@@ -108,7 +107,7 @@ Meta'nın **Instagram API with Instagram Login** ürünü kullanılır. Gerekenl
 app/
   (panel)/               Kenar çubuklu sayfalar: giriş, siparişler, müşteriler, gelen kutusu, ayarlar
   siparisler/[id]/       Tam ekran sipariş detayı ve düzenleme; siparisler/yeni: oluşturma
-  api/                   Route handler'lar; api/cron zamanlanmış işler; api/backup JSON yedek
+  api/                   Route handler'lar; api/cron zamanlanmış işler (varsayılan kapalı); api/backup JSON yedek
   webhooks/instagram/    Meta webhook (doğrulama + gelen mesaj)
 components/              Arayüz bileşenleri (Tailwind)
 lib/
@@ -119,8 +118,8 @@ lib/
   integrations/          instagram, dhl (tracking + API adaptörü)
   session.ts             Oturum imzası (Web Crypto), middleware.ts ile korunur
 supabase/schema.sql      Supabase SQL Editor'de bir kez çalıştırılacak şema
-instrumentation.ts       Kendi sunucunuzda zamanlayıcılar (Vercel'de cron kullanılır)
+instrumentation.ts       Kendi sunucunuzda zamanlayıcılar (yalnızca AUTOMATION_ENABLED=true ise)
 scripts/restore.ts       Yedekten geri yükleme
 test/run.ts              Servis testleri
-vercel.json              Bölge (fra1) ve günlük cron
+vercel.json              Bölge (fra1)
 ```

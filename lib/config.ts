@@ -65,7 +65,7 @@ export const cfg = {
     },
   },
   automation: {
-    enabled: bool(env.AUTOMATION_ENABLED, true),
+    enabled: bool(env.AUTOMATION_ENABLED, false),
     trackPollMinutes: Math.max(5, num(env.TRACK_POLL_MINUTES, 30)),
     satisfactionAutoCloseDays: Math.max(1, num(env.SATISFACTION_AUTO_CLOSE_DAYS, 7)),
   },

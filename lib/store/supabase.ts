@@ -7,10 +7,14 @@ const MISSING_TABLE = /schema cache|does not exist|PGRST205|42P01/i;
 
 function wrap(error: { message: string; code?: string; details?: string | null; hint?: string | null }): StoreError {
   let msg = error.message || 'Supabase hatası';
-  if (MISSING_TABLE.test(`${error.code || ''} ${msg}`)) {
+  const missing = MISSING_TABLE.test(`${error.code || ''} ${msg}`);
+  if (missing) {
     msg = `Supabase'de tablolar bulunamadı. supabase/schema.sql dosyasını Supabase › SQL Editor'de bir kez çalıştırın. (${error.message})`;
   } else if (error.details) msg += ` · ${error.details}`;
-  return new StoreError(msg, error.code);
+  const err = new StoreError(msg, error.code);
+  // Canlıda hata mesajları gizlenir; hata sayfası nedeni bu "digest" ile gösterir.
+  (err as StoreError & { digest?: string }).digest = missing ? 'ANKA_TABLE' : /jwt|api key|unauthorized|401|permission|policy|row-level/i.test(`${error.code} ${error.message}`) ? 'ANKA_AUTH' : `ANKA_DB:${error.code || ''}`;
+  return err;
 }
 
 /** PostgREST `or=(...)` sözdizimi için değer kaçışı: metinler çift tırnak içinde, \ ve " kaçışlı. */

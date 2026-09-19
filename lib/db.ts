@@ -32,7 +32,14 @@ async function init(opts: ReadyOptions) {
 
 export async function ready(opts: ReadyOptions = {}): Promise<void> {
   if (state.store) return;
-  if (!state.initPromise) state.initPromise = init(opts).catch((e) => { state.initPromise = null; throw e; });
+  if (!state.initPromise) {
+    state.initPromise = init(opts).catch((e) => {
+      state.initPromise = null;
+      // Canlıda (Vercel) hata mesajları gizlenir; hata sayfası bu "digest" ile nedeni gösterir.
+      (e as Error & { digest?: string }).digest = 'ANKA_CONFIG';
+      throw e;
+    });
+  }
   await state.initPromise;
 }
 

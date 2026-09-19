@@ -34,8 +34,8 @@ export const PLACEHOLDERS: Record<string, string> = {
   isletme: 'İşletme adı',
 };
 
-/** Otomatik mesaj anahtarları (Ayarlar'dan açılıp kapatılır). Varsayılan: kargo bildirimi açık, diğerleri kapalı. */
-export const AUTO_DEFAULTS: Record<string, boolean> = { auto_siparis_alindi: false, auto_kargo_bildirimi: true, auto_memnuniyet: false };
+/** Otomatik mesaj anahtarları (Ayarlar'dan açılıp kapatılır). Varsayılan: hepsi kapalı; mesajlar elle gönderilir. */
+export const AUTO_DEFAULTS: Record<string, boolean> = { auto_siparis_alindi: false, auto_kargo_bildirimi: false, auto_memnuniyet: false };
 export const AUTO_LABELS: Record<string, string> = {
   auto_siparis_alindi: 'Sipariş oluşturulunca "Sipariş alındı" mesajını otomatik gönder',
   auto_kargo_bildirimi: 'Kargoya verilince kargo bildirimini otomatik gönder',
