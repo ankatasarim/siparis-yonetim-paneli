@@ -89,16 +89,17 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
             </div>
             <div className="divide-y divide-neutral-100">
               {lines.map((l, i) => (
-                <div key={i} className={`grid grid-cols-[minmax(0,1fr)_36px] items-end gap-x-2 gap-y-2 px-4 py-3 md:items-center md:gap-3 ${cols}`}>
+                <div key={i} className={`grid grid-cols-[minmax(0,1fr)_36px] items-end gap-x-2 gap-y-3 px-4 py-3 md:items-center md:gap-3 ${cols}`}>
                   <div className="min-w-0">
                     <label className="label md:hidden">Ürün / açıklama</label>
                     <input value={l.name} onChange={(e) => setLine(i, { name: e.target.value })} placeholder="Örn: İsimli kolye (gümüş)" className="input" autoFocus={i === 0 && !isEdit} />
                   </div>
                   <button onClick={() => removeLine(i)} className="mb-1 justify-self-end rounded p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-600 md:col-start-5 md:mb-0" title="Satırı sil"><Trash2 className="h-4 w-4" /></button>
-                  <div className="col-span-2 grid grid-cols-[1fr_1fr_auto] items-end gap-2 md:contents">
+                  {/* Mobilde alt alta: adet, birim fiyat, toplam. Geniş ekranda aynı satırın sütunları. */}
+                  <div className="col-span-2 grid grid-cols-1 gap-3 md:contents">
                     <div><label className="label md:hidden">Adet</label><input type="number" min={1} value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} className="input" /></div>
                     <div><label className="label md:hidden">Birim fiyat (₺)</label><input value={l.price} onChange={(e) => setLine(i, { price: e.target.value })} inputMode="decimal" placeholder="0,00" className="input" /></div>
-                    <div className="min-w-[84px] pb-2 text-right text-sm font-medium md:pb-0"><span className="label md:hidden">Toplam</span>{money(num(l.qty) * num(l.price))}</div>
+                    <div className="flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2 text-sm md:block md:bg-transparent md:p-0 md:text-right"><span className="text-neutral-500 md:hidden">Satır toplamı</span><span className="font-medium">{money(num(l.qty) * num(l.price))}</span></div>
                   </div>
                 </div>
               ))}
@@ -108,21 +109,23 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
 
           <Card title="Müşteri" actions={custId ? <span className="text-xs text-neutral-500">Kayıtlı #{custId}{!isEdit && !customer && <button onClick={() => { setCustId(null); }} className="ml-2 text-primary-text hover:underline">değiştir</button>}</span> : <span className="text-xs text-neutral-500">Yeni müşteri</span>}>
             {!isEdit && !customer && !custId && (
-              <div className="relative mb-4">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Kayıtlı müşteri ara (isim, telefon, @instagram)" className="input pl-9 pr-8" />
-                {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400"><X className="h-4 w-4" /></button>}
-                {results.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg">
-                    {results.map((x) => (
-                      <button key={x.id} onClick={() => pick(x)} className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-neutral-50">
-                        <Avatar name={x.name || x.ig_username} src={x.profile_pic} size="sm" />
-                        <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{x.name || '@' + x.ig_username}</p><p className="truncate text-xs text-neutral-500">{[x.phone, x.ig_username ? '@' + x.ig_username : '', x.city].filter(Boolean).join(' · ')}</p></div>
-                        <span className="shrink-0 text-xs text-neutral-500">{x.order_count} sipariş</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Kayıtlı müşteri ara (isim, telefon, @instagram)" className="input pl-9 pr-8" />
+                  {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400"><X className="h-4 w-4" /></button>}
+                  {results.length > 0 && (
+                    <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg">
+                      {results.map((x) => (
+                        <button key={x.id} onClick={() => pick(x)} className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-neutral-50">
+                          <Avatar name={x.name || x.ig_username} src={x.profile_pic} size="sm" />
+                          <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{x.name || '@' + x.ig_username}</p><p className="truncate text-xs text-neutral-500">{[x.phone, x.ig_username ? '@' + x.ig_username : '', x.city].filter(Boolean).join(' · ')}</p></div>
+                          <span className="shrink-0 text-xs text-neutral-500">{x.order_count} sipariş</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <p className="mt-1 text-xs text-neutral-500">Boş bırakırsanız aşağıdaki bilgilerle yeni müşteri oluşturulur.</p>
               </div>
             )}
