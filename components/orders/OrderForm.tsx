@@ -3,15 +3,17 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Plus, Trash2, Search, X, Instagram } from 'lucide-react';
-import { api } from '@/lib/client';
+import { api, startNav } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import { Card, Field, Avatar } from '@/components/ui';
+import { Spinner } from '@/components/Loading';
 import { PAYMENT_STATUSES, SHIPPING_PAYERS, PAYMENT_METHODS } from '@/lib/constants';
 import { money } from '@/lib/format';
-import type { Customer, CustomerRow, OrderFull, OrderLine, PaymentStatus, ShippingPayer } from '@/lib/types';
+import type { Customer, CustomerRow, OrderFull, OrderLine, PaymentStatus, Product, ShippingPayer } from '@/lib/types';
 
-interface LineDraft { name: string; qty: string; price: string }
-const toDraft = (l: OrderLine): LineDraft => ({ name: l.name, qty: String(l.qty), price: l.price != null ? String(l.price) : '' });
+interface LineDraft { name: string; qty: string; price: string; product_id?: number | null }
+const toDraft = (l: OrderLine): LineDraft => ({ name: l.name, qty: String(l.qty), price: l.price != null ? String(l.price) : '', product_id: l.product_id ?? null });
+const norm = (s: string | null | undefined) => (s || '').toLocaleLowerCase('tr');
 const num = (v: string) => { const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; };
 
 export function OrderForm({ order, customer, prefillText }: { order?: OrderFull; customer?: Customer | null; prefillText?: string }) {
@@ -23,7 +25,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
   const [lines, setLines] = useState<LineDraft[]>(order?.lines.length ? order.lines.map(toDraft) : [{ name: prefillText || '', qty: '1', price: '' }]);
   const [custId, setCustId] = useState<number | null>(c0?.id ?? null);
   const [cust, setCust] = useState({ name: c0?.name || '', email: c0?.email || '', phone: c0?.phone || '', address: c0?.address || '', city: c0?.city || '', district: c0?.district || '', postal_code: c0?.postal_code || '', ig_username: c0?.ig_username || '' });
-  const igLinked = Boolean(c0?.ig_user_id);
+  const [igLinked, setIgLinked] = useState(Boolean(c0?.ig_user_id));
   const [f, setF] = useState({
     notes: order?.notes || '', labels: order?.labels || '', desi: order?.desi != null ? String(order.desi) : '', package_count: String(order?.package_count || 1),
     shipping_payer: (order?.shipping_payer || 'gonderici') as ShippingPayer, shipping_fee: String(order?.shipping_fee || 0),
@@ -32,6 +34,11 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<CustomerRow[]>([]);
   const [busy, setBusy] = useState(false);
+  // Ürün kataloğu: satırdaki ürün alanına tıklayınca öneri listesi açılır.
+  const [products, setProducts] = useState<Product[]>([]);
+  const [openSug, setOpenSug] = useState<number | null>(null);
+  const [focusIdx, setFocusIdx] = useState<number | null>(null);
+  useEffect(() => { api.get<Product[]>('/api/products?active=1').then(setProducts).catch(() => { /* katalog yoksa öneri gösterilmez */ }); }, []);
 
   useEffect(() => {
     if (!search.trim()) { setResults([]); return; }
@@ -44,14 +51,23 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
 
   const pick = (x: CustomerRow) => {
     setCustId(x.id);
+    setIgLinked(Boolean(x.ig_user_id));
     setCust({ name: x.name || '', email: x.email || '', phone: x.phone || '', address: x.address || '', city: x.city || '', district: x.district || '', postal_code: x.postal_code || '', ig_username: x.ig_username || '' });
     setSearch(''); setResults([]);
+  };
+  // "değiştir": kayıtlı müşteri bağını kaldırır; alanlar temizlenir, arama ile başka müşteri seçilir ya da yeni müşteri girilir.
+  const changeCustomer = () => {
+    setCustId(null); setIgLinked(false);
+    setCust({ name: '', email: '', phone: '', address: '', city: '', district: '', postal_code: '', ig_username: '' });
   };
 
   const subtotal = lines.reduce((s, l) => s + num(l.qty) * num(l.price), 0);
   const total = subtotal + num(f.shipping_fee);
   const setLine = (i: number, patch: Partial<LineDraft>) => setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const removeLine = (i: number) => setLines(lines.length > 1 ? lines.filter((_, j) => j !== i) : [{ name: '', qty: '1', price: '' }]);
+  const addLine = () => { setLines([...lines, { name: '', qty: '1', price: '', product_id: null }]); setFocusIdx(lines.length); };
+  const suggestionsFor = (text: string) => { const t = norm(text.trim()); return (t ? products.filter((p) => norm(p.name).includes(t) || norm(p.description).includes(t)) : products).slice(0, 8); };
+  const pickProduct = (i: number, p: Product) => { setLine(i, { name: p.name, price: p.price != null ? String(p.price) : '', product_id: p.id }); setOpenSug(null); };
 
   const submit = async () => {
     const validLines = lines.filter((l) => l.name.trim());
@@ -59,56 +75,70 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
     if (!cust.name.trim() && !custId) return toast('Müşteri adı gerekli', 'err');
     setBusy(true);
     const payload = {
-      customer: cust, lines: validLines.map((l) => ({ name: l.name.trim(), qty: num(l.qty) || 1, price: l.price.trim() === '' ? null : num(l.price) })),
+      customer: cust, lines: validLines.map((l) => ({ name: l.name.trim(), qty: num(l.qty) || 1, price: l.price.trim() === '' ? null : num(l.price), product_id: l.product_id ?? null })),
       notes: f.notes, labels: f.labels, desi: f.desi, package_count: f.package_count, shipping_payer: f.shipping_payer, shipping_fee: f.shipping_fee,
       payment_status: f.payment_status, payment_method: f.payment_method,
     };
     try {
       if (isEdit) {
-        await api.put(`/api/orders/${order!.id}`, payload);
+        await api.put(`/api/orders/${order!.id}`, { ...payload, customer_id: custId });
         toast('Sipariş güncellendi', 'ok');
+        startNav();
         router.push(`/siparisler/${order!.id}`);
       } else {
         const o = await api.post('/api/orders', custId ? { ...payload, customer_id: custId } : payload);
         toast(`Sipariş #${o.order_no} oluşturuldu`, 'ok');
+        startNav();
         router.push(`/siparisler/${o.id}`);
       }
       router.refresh();
     } catch (e) { fail(e); setBusy(false); }
   };
 
-  const cols = 'md:grid-cols-[minmax(0,1fr)_88px_130px_110px_36px]';
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24 pt-5 md:px-6 md:pb-6">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
         <div className="min-w-0 space-y-5">
           <Card title="Ürünler" pad={false}>
-            <div className={`hidden gap-3 bg-neutral-50 px-4 py-2 text-xs font-medium text-neutral-500 md:grid ${cols}`}>
-              <span>Ürün / açıklama</span><span>Adet</span><span>Birim fiyat (₺)</span><span className="text-right">Toplam</span><span />
-            </div>
             <div className="divide-y divide-neutral-100">
               {lines.map((l, i) => (
-                <div key={i} className={`grid grid-cols-[minmax(0,1fr)_36px] items-end gap-x-2 gap-y-3 px-4 py-3 md:items-center md:gap-3 ${cols}`}>
-                  <div className="min-w-0">
-                    <label className="label md:hidden">Ürün / açıklama</label>
-                    <input value={l.name} onChange={(e) => setLine(i, { name: e.target.value })} placeholder="Örn: İsimli kolye (gümüş)" className="input" autoFocus={i === 0 && !isEdit} />
+                <div key={i} className="px-4 py-3">
+                  {/* Üst satır: ürün alanı tam genişlik + sil düğmesi. Alt satır: adet, birim fiyat, satır toplamı. */}
+                  <div className="flex items-end gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <label className="label">Ürün / açıklama</label>
+                    <input value={l.name} onChange={(e) => { setLine(i, { name: e.target.value, product_id: null }); setOpenSug(i); }} onFocus={() => setOpenSug(i)} onBlur={() => setTimeout(() => setOpenSug((v) => (v === i ? null : v)), 150)}
+                      placeholder={products.length ? 'Listeden seçin veya yazın' : 'Örn: İsimli kolye (gümüş)'} className="input" autoComplete="off" autoFocus={i === focusIdx || (focusIdx === null && i === 0 && !isEdit)} />
+                    {openSug === i && suggestionsFor(l.name).length > 0 && (
+                      <div className="absolute left-0 right-0 z-20 mt-1 max-h-64 overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-lg">
+                        {suggestionsFor(l.name).map((p) => (
+                          <button key={p.id} type="button" onMouseDown={(e) => { e.preventDefault(); pickProduct(i, p); }} className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-neutral-50 ${l.product_id === p.id ? 'bg-primary/5' : ''}`}>
+                            <span className="flex min-w-0 items-center gap-2">{p.image && <img src={p.image} alt="" className="h-7 w-7 shrink-0 rounded border border-neutral-200 object-cover" />}<span className="min-w-0"><span className="block truncate font-medium">{p.name}</span>{p.description && <span className="block truncate text-xs text-neutral-500">{p.description}</span>}</span></span>
+                            <span className="shrink-0 text-neutral-600">{p.price != null ? money(p.price) : '—'}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <button onClick={() => removeLine(i)} className="mb-1 justify-self-end rounded p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-600 md:col-start-5 md:mb-0" title="Satırı sil"><Trash2 className="h-4 w-4" /></button>
-                  {/* Mobilde alt alta: adet, birim fiyat, toplam. Geniş ekranda aynı satırın sütunları. */}
-                  <div className="col-span-2 grid grid-cols-1 gap-3 md:contents">
-                    <div><label className="label md:hidden">Adet</label><input type="number" min={1} value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} className="input" /></div>
-                    <div><label className="label md:hidden">Birim fiyat (₺)</label><input value={l.price} onChange={(e) => setLine(i, { price: e.target.value })} inputMode="decimal" placeholder="0,00" className="input" /></div>
-                    <div className="flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2 text-sm md:block md:bg-transparent md:p-0 md:text-right"><span className="text-neutral-500 md:hidden">Satır toplamı</span><span className="font-medium">{money(num(l.qty) * num(l.price))}</span></div>
+                  <button onClick={() => removeLine(i)} className="mb-1 shrink-0 rounded p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-600" title="Satırı sil"><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[110px_150px_minmax(0,1fr)] sm:items-end">
+                    <div><label className="label">Adet</label><input type="number" min={1} value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} className="input" /></div>
+                    <div><label className="label">Birim fiyat (₺)</label><input value={l.price} onChange={(e) => setLine(i, { price: e.target.value })} inputMode="decimal" placeholder="0,00" className="input" /></div>
+                    <div className="flex items-center justify-between gap-3 rounded-md bg-neutral-50 px-3 py-2 text-sm sm:justify-end"><span className="text-neutral-500">Satır toplamı</span><span className="font-medium">{money(num(l.qty) * num(l.price))}</span></div>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="border-t border-neutral-100 px-4 py-3"><button onClick={() => setLines([...lines, { name: '', qty: '1', price: '' }])} className="btn btn-sm"><Plus className="h-3.5 w-3.5" />Ürün ekle</button></div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 px-4 py-3">
+              <button onClick={addLine} className="btn btn-sm"><Plus className="h-3.5 w-3.5" />Ürün ekle</button>
+              <p className="text-xs text-neutral-500">{products.length ? `${products.length} tanımlı ürün · ürün alanına tıklayınca liste açılır` : 'Tanımlı ürün yok'} · <Link href="/urunler" className="text-primary-text hover:underline">Ürünleri yönet</Link></p>
+            </div>
           </Card>
 
-          <Card title="Müşteri" actions={custId ? <span className="text-xs text-neutral-500">Kayıtlı #{custId}{!isEdit && !customer && <button onClick={() => { setCustId(null); }} className="ml-2 text-primary-text hover:underline">değiştir</button>}</span> : <span className="text-xs text-neutral-500">Yeni müşteri</span>}>
-            {!isEdit && !customer && !custId && (
+          <Card title="Müşteri" actions={custId ? <span className="text-xs text-neutral-500">Kayıtlı #{custId}{!customer && <button onClick={changeCustomer} className="ml-2 text-primary-text hover:underline">değiştir</button>}</span> : <span className="text-xs text-neutral-500">Yeni müşteri</span>}>
+            {!customer && !custId && (
               <div className="mb-4">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
@@ -126,7 +156,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
                     </div>
                   )}
                 </div>
-                <p className="mt-1 text-xs text-neutral-500">Boş bırakırsanız aşağıdaki bilgilerle yeni müşteri oluşturulur.</p>
+                <p className="mt-1 text-xs text-neutral-500">{isEdit ? 'Bir müşteri seçin ya da aşağıya yeni müşteri bilgilerini girin; sipariş bu müşteriye bağlanır.' : 'Boş bırakırsanız aşağıdaki bilgilerle yeni müşteri oluşturulur.'}</p>
               </div>
             )}
             <div className="grid gap-3 md:grid-cols-2">
@@ -179,7 +209,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
 
       <div className="fixed inset-x-0 bottom-0 z-20 flex gap-2 border-t border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur md:sticky md:mt-6 md:justify-end md:border-0 md:bg-transparent md:px-0 md:backdrop-blur-0">
         <Link href={isEdit ? `/siparisler/${order!.id}` : '/siparisler'} className="btn flex-1 md:flex-none">Vazgeç</Link>
-        <button disabled={busy} onClick={submit} className="btn btn-primary flex-1 md:flex-none">{isEdit ? 'Kaydet' : 'Siparişi oluştur'}</button>
+        <button disabled={busy} onClick={submit} className="btn btn-primary flex-1 md:flex-none">{busy && <Spinner />}{isEdit ? 'Kaydet' : 'Siparişi oluştur'}</button>
       </div>
     </div>
   );

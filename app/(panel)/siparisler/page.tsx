@@ -7,6 +7,7 @@ import { Pagination } from '@/components/Pagination';
 import { RowLink } from '@/components/RowLink';
 import { PaymentPill } from '@/components/Pills';
 import { StatusMenu } from '@/components/orders/StatusMenu';
+import { DhlExportButton } from '@/components/orders/DhlExportButton';
 import { Empty } from '@/components/ui';
 import { SATISFACTION_LABELS } from '@/lib/constants';
 import { money, fmtDay, fmtTime, fmtShort, trunc } from '@/lib/format';
@@ -31,7 +32,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         title="Siparişler"
         info="Satıra tıklayarak detaya gidin; durum rozetine tıklayarak durumu listeden değiştirin."
         actions={<>
-          <a href="/api/orders/export" className="btn"><Upload className="h-4 w-4" /><span className="hidden sm:inline">Dışa Aktar</span><span className="sm:hidden">CSV</span></a>
+          <a href="/api/orders/export" className="btn"><Upload className="h-4 w-4" /><span className="hidden sm:inline">CSV</span><span className="sm:hidden">CSV</span></a>
+          <DhlExportButton />
           <Link href="/siparisler/yeni" className="btn btn-primary">Sipariş Oluştur</Link>
         </>}
       />

@@ -76,7 +76,7 @@ export function ShipmentCard({ order, copyBlock, canCreate, canTrack, onlineSube
 
       {preShip && (
         <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50 p-4">
-          <p className="mb-2 text-xs text-neutral-600">{canCreate ? 'DHL API bağlı: gönderiyi doğrudan buradan oluşturabilirsiniz.' : 'Aşağıdaki bilgileri DHL Online Şube\'ye girin, aldığınız takip numarasını kaydedin. Kayıtla birlikte müşteriye kargo mesajı otomatik gider.'}</p>
+          <p className="mb-2 text-xs text-neutral-600">{canCreate ? 'DHL API bağlı: gönderiyi doğrudan buradan oluşturabilirsiniz.' : 'Aşağıdaki bilgileri DHL Online Şube\'ye girin, aldığınız takip numarasını kaydedin. Kayıttan sonra kargo mesajını Bildirimler kartından tek tıkla gönderebilirsiniz.'}</p>
           <pre className="whitespace-pre-wrap rounded-md border border-neutral-200 bg-white p-3 font-mono text-xs leading-relaxed">{copyBlock}</pre>
           <div className="mt-3 flex flex-wrap gap-2">
             <button onClick={async () => { if (await copyText(copyBlock)) toast('Kopyalandı', 'ok'); }} className="btn btn-sm"><Copy className="h-3.5 w-3.5" />Kopyala</button>
@@ -85,7 +85,7 @@ export function ShipmentCard({ order, copyBlock, canCreate, canTrack, onlineSube
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <input value={trackingNo} onChange={(e) => setTrackingNo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (document.getElementById('ship-save') as HTMLButtonElement)?.click(); }} placeholder="DHL takip numarası" className="input max-w-xs" />
-            <button id="ship-save" disabled={busy} onClick={() => { if (!trackingNo.trim()) return toast('Takip numarası girin', 'err'); run(() => api.post(`/api/orders/${order.id}/shipment`, { ...fields(), tracking_no: trackingNo.trim() }), 'Kargo kaydedildi, müşteri bilgilendiriliyor'); }} className="btn btn-sm btn-primary">Kargoya verildi olarak kaydet</button>
+            <button id="ship-save" disabled={busy} onClick={() => { if (!trackingNo.trim()) return toast('Takip numarası girin', 'err'); run(() => api.post(`/api/orders/${order.id}/shipment`, { ...fields(), tracking_no: trackingNo.trim() }), 'Kargo kaydedildi'); }} className="btn btn-sm btn-primary">Kargoya verildi olarak kaydet</button>
           </div>
           <ConfirmDialog open={confirmApi} text="DHL API üzerinden gönderi oluşturulsun mu? Alıcı bilgileri ve desi DHL'ye iletilecek." okLabel="Oluştur" busy={busy} onCancel={() => setConfirmApi(false)} onConfirm={async () => { const ok = await run(() => api.post(`/api/orders/${order.id}/shipment`, fields()), 'DHL gönderisi oluşturuldu'); if (ok) setConfirmApi(false); }} />
         </div>

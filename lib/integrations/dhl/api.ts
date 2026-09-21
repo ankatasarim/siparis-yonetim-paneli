@@ -1,102 +1,107 @@
 import { cfg } from '../../config';
-import { DHL_STATUS_TEXT } from '../../constants';
-import { httpError } from '../../utils';
-import type { Customer, Order, TrackResult } from '../../types';
+import { httpError, round2 } from '../../utils';
+import { isConfigured, request } from './client';
+import { resolveCodes } from './cbs';
+import { contentSummary, phoneDigits, up } from './format';
+import type { Customer, Order } from '../../types';
 
 /**
- * DHL eCommerce Türkiye "kargo sipariş web servisi" adaptörü.
+ * DHL eCommerce Türkiye "Standard Command API" adaptörü (dhl/standard-command-api-10_1.0.json).
+ * Kimlik doğrulama client.ts (dhl/identity-api-10_1.0.json), il/ilçe kodları cbs.ts.
  *
- * DHL eCommerce Türkiye bu servisin dokümanını herkese açık yayınlamıyor; kullanıcı adı, şifre,
- * müşteri numarası ve uç nokta bilgileri çalıştığınız DHL şubesinden alınır. Bu dosya şubeden gelen
- * dokümana göre uyarlanacak ŞABLON bir REST/JSON adaptörüdür:
- *  - buildPayload(): panelden gelen siparişi DHL'nin beklediği alan adlarına çevirir
- *  - parseCreateResponse(): yanıt içinden takip numarasını bulur
- *  - track(): gönderi durumunu sorgular ve panelin anladığı sade duruma çevirir
+ * createOrder yanıtı kargo takip numarası içermez (orderInvoiceId = DHL sipariş kaydı). Sipariş referansı
+ * (= barkod) DHL tarafında siparişi tanımlayan anahtardır; updateorder/cancelorder de bununla çalışır.
+ * Bu yüzden panelde takip numarası olarak referans saklanır; gerçek takip numarası Standard Query API ile alınabilir (doküman bekleniyor).
  */
 
-const PAYMENT_CODES: Record<string, string> = { gonderici: 'GONDERICI', alici: 'ALICI' };
+export { isConfigured };
 
-export function isConfigured(): boolean {
-  return cfg.dhl.mode === 'api' && Boolean(cfg.dhl.api.baseUrl);
+export const SERVICE_TYPE = { STANDART: 1, GUN_ICI: 7, AKSAM: 8 } as const;
+export const PACKAGING_TYPE = { DOSYA: 1, MI: 2, PAKET: 3, KOLI: 4 } as const;
+export const PAYMENT_TYPE = { GONDERICI_ODER: 1, ALICI_ODER: 2, PLATFORM_ODER: 3 } as const;
+export const DELIVERY_TYPE = { ADRESE_TESLIM: 1, ALICISI_HABERLI: 2 } as const;
+
+/** DHL sipariş referansı: benzersiz ve büyük harf olmalı (doküman). Önek + sipariş no, yalnızca A-Z 0-9 _ - */
+export function referenceId(order: Pick<Order, 'order_no'>): string {
+  return `${cfg.dhl.api.referencePrefix}${order.order_no}`.toUpperCase().replace(/[^A-Z0-9_-]/g, '');
 }
 
-function headers(): Record<string, string> {
-  const a = cfg.dhl.api;
-  const h: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
-  if (a.username) h.Authorization = 'Basic ' + Buffer.from(`${a.username}:${a.password}`).toString('base64');
-  return h;
-}
+export interface RecipientCodes { cityCode: number; districtCode: number; cityName: string; districtName: string }
 
-export function buildPayload(order: Order, customer: Customer, sender = cfg.dhl.sender) {
-  const a = cfg.dhl.api;
+export function buildPayload(order: Order, customer: Customer, codes: RecipientCodes) {
+  const ref = referenceId(order);
+  const n = Math.max(1, Number(order.package_count) || 1);
+  const desiTotal = order.desi && order.desi > 0 ? order.desi : 1;
+  const perPiece = Math.max(1, Math.ceil(desiTotal / n)); // API tam sayı (int32) bekliyor
+  const content = contentSummary(order.items);
+  const cod = order.payment_status === 'kapida_odeme';
+  const description = (order.labels || '').replace(/\s+/g, ' ').trim().slice(0, 200) || content;
   return {
-    musteriNo: a.customerNo,
-    kullaniciAdi: a.username,
-    sifre: a.password,
-    referansNo: String(order.order_no),
-    gonderici: { adSoyad: sender.name, telefon: sender.phone, adres: sender.address, il: sender.city, ilce: sender.district, postaKodu: sender.postalCode },
-    alici: { adSoyad: customer.name, telefon: customer.phone, adres: customer.address, il: customer.city, ilce: customer.district, postaKodu: customer.postal_code },
-    desi: order.desi || 1,
-    parcaSayisi: order.package_count || 1,
-    odemeTipi: PAYMENT_CODES[order.shipping_payer] || 'GONDERICI',
-    tahsilatTutari: order.payment_status === 'kapida_odeme' ? order.total || 0 : 0,
-    aciklama: [order.items, order.labels].filter(Boolean).join(' | ').slice(0, 200),
+    order: {
+      referenceId: ref,
+      barcode: ref, // doküman: barkod referans ile aynı olmalı
+      billOfLandingId: '',
+      isCOD: cod ? 1 : 0,
+      codAmount: cod ? round2(Number(order.total) || 0) : 0,
+      shipmentServiceType: SERVICE_TYPE.STANDART,
+      packagingType: PACKAGING_TYPE.PAKET,
+      content,
+      smsPreference1: 1, // varış şubesinde alıcıya SMS (Excel: ALICI_SMS=E)
+      smsPreference2: 0,
+      smsPreference3: 0, // teslimde göndericiye SMS (Excel: GONDERICI_SMS=H)
+      paymentType: order.shipping_payer === 'alici' ? PAYMENT_TYPE.ALICI_ODER : PAYMENT_TYPE.GONDERICI_ODER,
+      deliveryType: DELIVERY_TYPE.ADRESE_TESLIM,
+      description,
+      marketPlaceShortCode: '',
+      marketPlaceSaleCode: '',
+      pudoId: '',
+    },
+    orderPieceList: Array.from({ length: n }, (_, i) => ({ barcode: `${ref}_PARCA${i + 1}`, desi: perPiece, kg: perPiece, content })),
+    recipient: {
+      refCustomerId: String(customer.id),
+      cityCode: codes.cityCode,
+      districtCode: codes.districtCode,
+      cityName: codes.cityName,
+      districtName: codes.districtName,
+      address: up(customer.address),
+      fullName: up(customer.name),
+      mobilePhoneNumber: phoneDigits(customer.phone),
+      homePhoneNumber: '',
+      bussinessPhoneNumber: '',
+      email: (customer.email || '').trim(),
+      taxOffice: '',
+      taxNumber: '',
+    },
   };
 }
 
-const TRACKING_KEYS = ['takipNo', 'TakipNo', 'takipNumarasi', 'trackingNumber', 'trackingNo', 'barkod', 'Barkod', 'barcode', 'gonderiNo', 'GonderiNo', 'shipmentNumber'];
-const REF_KEYS = ['gonderiId', 'shipmentId', 'id', 'referans', 'reference'];
+export interface CreateResult { trackingNo: string; shipmentRef: string | null; branchCode: string | null; raw: unknown }
 
-function findKey(obj: any, keys: string[], depth = 0): string | null {
-  if (!obj || typeof obj !== 'object' || depth > 4) return null;
-  for (const k of keys) if (obj[k] != null && obj[k] !== '') return String(obj[k]);
-  for (const v of Object.values(obj)) {
-    if (v && typeof v === 'object') {
-      const found = findKey(v, keys, depth + 1);
-      if (found) return found;
-    }
-  }
-  return null;
+/** Yanıt: { orderInvoiceId, orderInvoiceDetailId, shipperBranchCode, referenceId } */
+export function parseCreateResponse(data: unknown, expectedRef: string): CreateResult {
+  const d = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
+  const invoiceId = d && d.orderInvoiceId != null && d.orderInvoiceId !== '' ? String(d.orderInvoiceId) : null;
+  if (!invoiceId) throw httpError(502, `DHL yanıtında sipariş kaydı (orderInvoiceId) yok: ${JSON.stringify(data).slice(0, 300)}`);
+  return {
+    trackingNo: d && d.referenceId ? String(d.referenceId) : expectedRef,
+    shipmentRef: invoiceId,
+    branchCode: d && d.shipperBranchCode != null ? String(d.shipperBranchCode) : null,
+    raw: data,
+  };
 }
 
-export function parseCreateResponse(data: unknown): { trackingNo: string; shipmentRef: string | null; raw: unknown } {
-  const trackingNo = findKey(data, TRACKING_KEYS);
-  if (!trackingNo) throw httpError(502, `DHL yanıtında takip numarası bulunamadı: ${JSON.stringify(data).slice(0, 300)}`);
-  return { trackingNo, shipmentRef: findKey(data, REF_KEYS), raw: data };
+export async function createShipment(order: Order, customer: Customer): Promise<CreateResult> {
+  if (!isConfigured()) throw httpError(400, 'DHL API modu yapılandırılmadı (DHL_MODE=api ve DHL_API_* değişkenleri gerekli)');
+  if (!customer.name?.trim() || !phoneDigits(customer.phone) || !customer.address?.trim()) throw httpError(400, 'DHL gönderisi için alıcı adı, telefonu ve adresi eksiksiz olmalı');
+  if (!customer.city?.trim() || !customer.district?.trim()) throw httpError(400, 'DHL gönderisi için alıcının il ve ilçesi girilmeli');
+  const codes = await resolveCodes(customer.city, customer.district);
+  const payload = buildPayload(order, customer, codes);
+  const data = await request('POST', '/standardcmdapi/createOrder', payload);
+  return parseCreateResponse(data, payload.order.referenceId);
 }
 
-export async function createShipment(order: Order, customer: Customer) {
-  if (!isConfigured()) throw httpError(400, 'DHL API modu yapılandırılmadı (DHL_MODE=api ve DHL_API_BASE_URL gerekli)');
-  if (!customer.name || !customer.phone || !customer.address) throw httpError(400, 'DHL gönderisi için müşteri adı, telefonu ve adresi eksiksiz olmalı');
-  const res = await fetch(cfg.dhl.api.baseUrl + cfg.dhl.api.createPath, {
-    method: 'POST', headers: headers(), body: JSON.stringify(buildPayload(order, customer)), signal: AbortSignal.timeout(20000),
-  });
-  const text = await res.text();
-  let data: unknown;
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
-  if (!res.ok) throw httpError(502, `DHL gönderi oluşturulamadı (${res.status}): ${text.slice(0, 300)}`);
-  return parseCreateResponse(data);
-}
-
-const STATUS_WORDS: [RegExp, string][] = [
-  [/teslim edildi|delivered/i, 'delivered'],
-  [/dağıtım|dagitim|out for delivery/i, 'out_for_delivery'],
-  [/iade|return/i, 'returned'],
-  [/yolda|transfer|transit|çıkış|cikis|varış|varis/i, 'in_transit'],
-  [/olusturuldu|oluşturuldu|kabul|created|bekliyor/i, 'created'],
-  [/hasar|kayıp|kayip|sorun|hata|exception/i, 'exception'],
-];
-
-export async function track(trackingNo: string): Promise<TrackResult | null> {
-  if (!isConfigured()) return null;
-  const path = cfg.dhl.api.trackPath.replace('{trackingNo}', encodeURIComponent(trackingNo));
-  const res = await fetch(cfg.dhl.api.baseUrl + path, { headers: headers(), signal: AbortSignal.timeout(15000) });
-  const text = await res.text();
-  if (!res.ok) throw httpError(502, `DHL durum sorgusu başarısız (${res.status}): ${text.slice(0, 200)}`);
-  let data: unknown;
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
-  const desc = findKey(data, ['durum', 'Durum', 'durumAciklama', 'status', 'statusText', 'aciklama']) || '';
-  let status = 'unknown';
-  for (const [re, s] of STATUS_WORDS) if (re.test(desc)) { status = s; break; }
-  return { status, text: desc ? `${DHL_STATUS_TEXT[status]} · ${desc}` : DHL_STATUS_TEXT[status], events: [], raw: data };
+/** PUT /standardcmdapi/cancelorder/{referenceId} — henüz kargoya çıkmamış siparişi DHL'de iptal eder. */
+export async function cancelOrder(ref: string): Promise<unknown> {
+  if (!ref) throw httpError(400, 'DHL iptali için sipariş referansı gerekli');
+  return request('PUT', `/standardcmdapi/cancelorder/${encodeURIComponent(ref)}`);
 }

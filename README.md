@@ -11,8 +11,9 @@ Instagram'dan gelen siparişleri tek panelden yönetmek için hazırlanmış, **
 - **Giriş (panel):** Durum sayaçları, bu ayki ciro, yeni / kargo bekleyen / kargodaki siparişler, dikkat gerektiren işler, son hareketler.
 - **Siparişler:** ikas'taki gibi tablo, arama, durum ve ödeme filtreleri, sayfalama, CSV dışa aktarma. Durum rozetine tıklayınca detaya girmeden durum değiştirilir (kargoya verirken takip numarası sorulur).
 - **Sipariş detayı:** Siyah üst barlı tam ekran sayfa; ürün tablosu, müşteri ve sevkiyat adresi, zaman çizelgesi + iç yorumlar, sağda sipariş özeti, ödeme, durum işlemleri, memnuniyet ve bildirimler.
-- **Sipariş oluşturma:** Ürün satırları, kayıtlı müşteri arama veya yeni müşteri, etiket / kişiselleştirme notu, ödeme durumu ve yöntemi, kargo ücreti, desi, parça, kargo ödeyen.
-- **DHL kargo:** Manuel mod (Online Şube + takip numarası, hemen kullanılabilir), API modu (şubeden gelen bilgilerle), Unified Tracking API ile teslimat sorgusu (elle tetiklenir).
+- **Ürünler:** Sık satılan ürünlerin kataloğu (ad, fiyat, açıklama, görsel adresi, desi, aktif/pasif). Sipariş formunda ürün alanına tıklayınca listelenir; seçince ad ve fiyat satıra dolar.
+- **Sipariş oluşturma:** Ürün satırları (katalogdan seçilebilir), kayıtlı müşteri arama veya yeni müşteri, etiket / kişiselleştirme notu, ödeme durumu ve yöntemi, kargo ücreti, desi, parça, kargo ödeyen.
+- **DHL kargo:** Manuel mod (Online Şube + takip numarası, hemen kullanılabilir), **toplu gönderi Excel'i** (Siparişler › "DHL Excel": seçilen siparişler DHL'nin aktarım şablonuna yazılır, Online Şube › Toplu Gönderi Aktarımı'na yüklenir), API modu (şubeden gelen bilgilerle), Unified Tracking API ile teslimat sorgusu (elle tetiklenir).
 - **Gelen Kutusu:** "Instagram'dan çek" düğmesi son DM'leri getirir ve listeler; panelden cevap yazılır, mesajdan tek tıkla sipariş oluşturulur.
 - **Memnuniyet:** Teslim sonrası soruyu uygun gördüğünüzde tek tıkla gönderirsiniz. Müşterinin cevabı çekildiğinde sınıflandırılır.
 - **Ayarlar:** Entegrasyon durumu, yedek indirme, cron adresi, elle gönderilecek bildirimler, mesaj şablonları ve otomatik gönderim anahtarları (varsayılan kapalı), Instagram'sız test aracı.
@@ -36,7 +37,7 @@ Geliştirme için `npm run dev`. Testler: `npm test` (bellek içi depo, internet
 
 ### 1) Supabase: tablolar ve anahtar
 1. https://supabase.com → projeniz (bölge Avrupa önerilir).
-2. **SQL Editor › New query** → [supabase/schema.sql](supabase/schema.sql) dosyasının tamamını yapıştırın → **Run**. Tablolar, güvenlik kuralları (RLS) ve yedek kovası oluşur. Bir kez yapılır.
+2. **SQL Editor › New query** → [supabase/schema.sql](supabase/schema.sql) dosyasının tamamını yapıştırın → **Run**. Tablolar, güvenlik kuralları (RLS) ve yedek kovası oluşur. Bir kez yapılır. Şemayı daha önce kurduysanız ürün kataloğu için [supabase/urunler.sql](supabase/urunler.sql) dosyasını aynı şekilde çalıştırın.
 3. **Project Settings › Data API › Project URL** = `SUPABASE_URL`. Anahtar için iki seçenek:
    - **Publishable anahtar** (`sb_publishable_...`, Project Settings › API Keys) → `SUPABASE_PUBLISHABLE_KEY`. `schema.sql` bu anahtara tablo erişimi verir. Anahtar herkese açık sayıldığından proje klasörünü paylaşırken `.env` dosyasını dışarıda tutun.
    - **Gizli anahtar** (`sb_secret_...`, Secret keys sekmesi) → `SUPABASE_SECRET_KEY`. Daha güvenli; girildiğinde publishable anahtar kullanılmaz ve `schema.sql` içindeki `anka_anon_*` politikalarını silebilirsiniz.
@@ -75,7 +76,7 @@ Uygulama varsayılan olarak dışarıya otomatik istek atmaz (`AUTOMATION_ENABLE
 1. **Sipariş geldi:** Gelen Kutusu'nda müşterinin DM'ini açın → "Sipariş oluştur". Instagram bağlı değilse "Sipariş Oluştur" ile elle girin.
 2. **Ödeme:** Havale gelince "Ödeme alındı" deyin. Kapıda ödeme için ödeme durumunu "Kapıda Ödeme" seçin.
 3. **Hazırlık:** "Hazırlığa al". Koli hazır olunca desi / parça / kargo ödeyen bilgisini girin.
-4. **Kargo:** "Kopyala" ile alıcı bilgilerini alın, DHL Online Şube'de gönderiyi oluşturun, takip numarasını listeden veya detaydan girin. Bildirimler kartından takip linkli mesajı tek tıkla gönderin.
+4. **Kargo:** Tek sipariş için "Kopyala" ile alıcı bilgilerini alıp DHL Online Şube'de gönderiyi oluşturun; çok sipariş için Siparişler › "DHL Excel" ile dosyayı indirip Online Şube › Toplu Gönderi Aktarımı'na yükleyin (şablon: `Ornek_Toplu_Gonderi_Aktarim_Sablonu (1).xls`). Takip numarasını listeden veya detaydan girin. Bildirimler kartından takip linkli mesajı tek tıkla gönderin.
 5. **Teslim:** "Teslim edildi" deyin (Takip API'si tanımlıysa Ayarlar › "İşleri şimdi çalıştır" da algılar).
 6. **Memnuniyet ve kapanış:** Uygun gördüğünüzde "Memnuniyet sorusunu gönder". Olumlu cevap gelince sipariş kapanır; olumsuz cevaplar uyarı olarak görünür.
 
@@ -97,15 +98,20 @@ Meta'nın **Instagram API with Instagram Login** ürünü kullanılır. Gerekenl
 
 ## DHL eCommerce
 
-- **Manuel mod** (`DHL_MODE=manual`, varsayılan): Gönderiyi https://onlinesube.dhlecommerce.com.tr üzerinden siz oluşturursunuz.
+- **Manuel mod** (`DHL_MODE=manual`, varsayılan): Gönderiyi https://onlinesube.dhlecommerce.com.tr üzerinden siz oluşturursunuz; sipariş listesinden DHL "Toplu Gönderi Aktarımı" Excel dosyası indirilebilir.
 - **Takip:** https://developer.dhl.com "Shipment Tracking – Unified" anahtarını `DHL_TRACKING_API_KEY` olarak ekleyin; Ayarlar › "İşleri şimdi çalıştır" ile kargodaki siparişler sorgulanır.
-- **API modu:** Şubenizden web servis bilgilerini alınca `DHL_MODE=api` ve `DHL_API_*` değişkenleri; alan adlarını [lib/integrations/dhl/api.ts](lib/integrations/dhl/api.ts) içinde uyarlayın.
+- **API modu** (`DHL_MODE=api`): DHL eCommerce Türkiye API'si eski MNG Kargo altyapısında çalışır (dokümanlar [dhl/](dhl/) klasöründe, Swagger JSON). DHL API portalından alınan `DHL_API_CLIENT_ID`, `DHL_API_CLIENT_SECRET` ile müşteri numarası ve API şifresi (`DHL_API_CUSTOMER_NO`, `DHL_API_PASSWORD`) girilir. `DHL_API_ENV=test` deneme sunucusunu (testapi.mngkargo.com.tr), `prod` gerçek sunucuyu (api.mngkargo.com.tr) kullanır.
+  - Sipariş detayındaki **DHL API ile gönderi oluştur** düğmesi Standard Command API `createOrder` çağırır; sipariş numarası (isteğe bağlı `DHL_API_REFERENCE_PREFIX` önekiyle) DHL referansı ve barkodu olur. Panelde **İptal** durumuna alınan sipariş DHL'de de iptal edilir (`cancelorder`); başaramazsa sipariş geçmişine not düşer.
+  - İl/ilçe kodları CBS Info API'den alınıp 24 saat önbelleğe konur; müşteri kartındaki il ve ilçe adı DHL listesiyle eşleşmelidir.
+  - Elimizdeki dokümanlar: Identity API (token) ve Standard Command API (createOrder, updateorder, cancelorder, createReturnOrder).
+  - Eksik dokümanlar: **CBS Info API** (il/ilçe kodları; yollar canlı sunucuda doğrulandı, yanıt alan adları toleranslı okunur), **Standard Query API** (kargo takip numarası ve durum sorgulama), **Barcode Command API** (etiket/barkod yazdırma). createOrder yanıtı takip numarası vermediği için bunlar gelene kadar panelde takip numarası olarak DHL referansı saklanır.
+  - Kod: [lib/integrations/dhl/client.ts](lib/integrations/dhl/client.ts) (token, istek), [cbs.ts](lib/integrations/dhl/cbs.ts) (il/ilçe), [api.ts](lib/integrations/dhl/api.ts) (sipariş oluşturma/iptal).
 
 ## Proje yapısı
 
 ```
 app/
-  (panel)/               Kenar çubuklu sayfalar: giriş, siparişler, müşteriler, gelen kutusu, ayarlar
+  (panel)/               Kenar çubuklu sayfalar: giriş, siparişler, ürünler, müşteriler, gelen kutusu, ayarlar
   siparisler/[id]/       Tam ekran sipariş detayı ve düzenleme; siparisler/yeni: oluşturma
   api/                   Route handler'lar; api/cron zamanlanmış işler (varsayılan kapalı); api/backup JSON yedek
   webhooks/instagram/    Meta webhook (doğrulama + gelen mesaj)
@@ -114,12 +120,13 @@ lib/
   store.ts               Veri deposu arayüzü (filtre/sıralama/sayfalama)
   store/supabase.ts      Supabase REST API (supabase-js, gizli anahtar)
   store/local.ts         Yerel JSON deposu (geliştirme/test)
-  services/              orders, customers, messaging, inbox, automation, backup
+  services/              orders, products, customers, messaging, inbox, automation, backup
   integrations/          instagram, dhl (tracking + API adaptörü)
   session.ts             Oturum imzası (Web Crypto), middleware.ts ile korunur
-supabase/schema.sql      Supabase SQL Editor'de bir kez çalıştırılacak şema
+supabase/schema.sql      Supabase SQL Editor'de bir kez çalıştırılacak şema (urunler.sql: mevcut kuruluma ürün tablosu ekler)
 instrumentation.ts       Kendi sunucunuzda zamanlayıcılar (yalnızca AUTOMATION_ENABLED=true ise)
 scripts/restore.ts       Yedekten geri yükleme
 test/run.ts              Servis testleri
 vercel.json              Bölge (fra1)
+dhl/                     DHL API dokümanları (Swagger JSON: Identity + Standard Command)
 ```

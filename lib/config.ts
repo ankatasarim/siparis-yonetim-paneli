@@ -45,13 +45,15 @@ export const cfg = {
   },
   dhl: {
     mode: (env.DHL_MODE || 'manual').toLowerCase() === 'api' ? ('api' as const) : ('manual' as const),
+    /** DHL eCommerce Türkiye API (eski MNG Kargo altyapısı; dokümanlar dhl/*.json). Varsayılan test sunucusu: yanlışlıkla gerçek gönderi oluşmasın. */
     api: {
+      env: (env.DHL_API_ENV || 'test').toLowerCase() === 'prod' ? ('prod' as const) : ('test' as const),
       baseUrl: (env.DHL_API_BASE_URL || '').replace(/\/+$/, ''),
-      username: env.DHL_API_USERNAME || '',
-      password: env.DHL_API_PASSWORD || '',
+      clientId: env.DHL_API_CLIENT_ID || '',
+      clientSecret: env.DHL_API_CLIENT_SECRET || '',
       customerNo: env.DHL_API_CUSTOMER_NO || '',
-      createPath: env.DHL_API_CREATE_PATH || '/shipments',
-      trackPath: env.DHL_API_TRACK_PATH || '/shipments/{trackingNo}',
+      password: env.DHL_API_PASSWORD || '',
+      referencePrefix: env.DHL_API_REFERENCE_PREFIX || '',
     },
     trackingApiKey: env.DHL_TRACKING_API_KEY || '',
     trackingApiBase: env.DHL_TRACKING_API_BASE || 'https://api-eu.dhl.com/track/shipments',

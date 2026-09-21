@@ -22,6 +22,9 @@ export const api = {
   del: <T = any>(url: string) => request<T>('DELETE', url),
 };
 
+/** Programatik yönlendirmeden (router.push) önce çağrılır; üstteki ilerleme çubuğunu başlatır. */
+export const startNav = () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event('anka:nav')); };
+
 export async function copyText(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);

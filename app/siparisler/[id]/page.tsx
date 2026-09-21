@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, ArrowRight, Instagram, MessageCircle, Pencil, User } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Instagram, MessageCircle, Pencil, Truck, User } from 'lucide-react';
 import { ready, orders, messaging, dhl, instagram } from '@/lib/services';
 import { cfg } from '@/lib/config';
 import { FullscreenHeader } from '@/components/FullscreenHeader';
@@ -52,13 +52,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         right={<>
           {nb.prev ? <Link href={`/siparisler/${nb.prev}`} className={navBtn}><ArrowLeft className="h-4 w-4" />Önceki</Link> : <span className={`${navBtn} opacity-40`}><ArrowLeft className="h-4 w-4" />Önceki</span>}
           {nb.next ? <Link href={`/siparisler/${nb.next}`} className={navBtn}>Sonraki<ArrowRight className="h-4 w-4" /></Link> : <span className={`${navBtn} opacity-40`}>Sonraki<ArrowRight className="h-4 w-4" /></span>}
+          <Link href={`/siparisler/${o.id}/duzenle`} className="btn btn-dark" title="Siparişi düzenle"><Pencil className="h-4 w-4" /><span className="hidden sm:inline">Düzenle</span></Link>
           <OrderActionsMenu id={o.id} orderNo={o.order_no} />
         </>}
       />
 
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-5 px-3 py-4 sm:px-4 sm:py-6 md:px-6 lg:grid-cols-[minmax(0,1fr)_330px]">
         <div className="min-w-0 space-y-5">
-          <Card pad={false} title={<><StatusPill status={o.status} /><span className="hidden sm:inline">{STATUSES[o.status].label}</span> <span className="font-normal text-neutral-500">({count} ürün)</span></>} actions={<span className="hidden text-xs text-neutral-500 sm:inline">Sipariş #{o.order_no}</span>}>
+          <Card pad={false} title={<><StatusPill status={o.status} /><span className="hidden sm:inline">{STATUSES[o.status].label}</span> <span className="font-normal text-neutral-500">({count} ürün)</span></>} actions={<Link href={`/siparisler/${o.id}/duzenle`} className="btn btn-sm"><Pencil className="h-3.5 w-3.5" />Ürünleri düzenle</Link>}>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead><tr><th className="th">Ürün</th><th className="th w-14 text-right sm:w-20">Adet</th><th className="th w-24 text-right sm:w-28">Fiyat</th><th className="th w-24 text-right sm:w-32">Toplam</th></tr></thead>
@@ -74,10 +75,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 </tbody>
               </table>
             </div>
-            {o.labels && <div className="mx-5 my-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm"><span className="font-medium">🏷 Etiket / kişiselleştirme notu:</span> {o.labels}</div>}
-            <div className="border-t border-neutral-100 px-5 py-4">
-              <ShipmentCard order={{ id: o.id, status: o.status, desi: o.desi, package_count: o.package_count, shipping_payer: o.shipping_payer, shipping_fee: o.shipping_fee, dhl_tracking_no: o.dhl_tracking_no, dhl_status_text: o.dhl_status_text, dhl_last_check: o.dhl_last_check, shipped_at: o.shipped_at, delivered_at: o.delivered_at, tracking_url: o.tracking_url }} copyBlock={copyBlock(o)} canCreate={dhl.canCreate()} canTrack={dhl.canTrack()} onlineSubeUrl={ONLINE_SUBE_URL} />
-            </div>
+            {o.labels && <div className="mx-4 my-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm sm:mx-5"><span className="font-medium">🏷 Etiket / kişiselleştirme notu:</span> {o.labels}</div>}
+          </Card>
+
+          <Card title={<><Truck className="h-4 w-4 text-neutral-500" />Kargo</>} actions={o.dhl_tracking_no ? <span className="rounded bg-[#ffcc00] px-1.5 py-0.5 text-[10px] font-bold text-[#d40511]">DHL</span> : <span className="text-xs text-neutral-500">Henüz kargoya verilmedi</span>}>
+            <ShipmentCard order={{ id: o.id, status: o.status, desi: o.desi, package_count: o.package_count, shipping_payer: o.shipping_payer, shipping_fee: o.shipping_fee, dhl_tracking_no: o.dhl_tracking_no, dhl_status_text: o.dhl_status_text, dhl_last_check: o.dhl_last_check, shipped_at: o.shipped_at, delivered_at: o.delivered_at, tracking_url: o.tracking_url }} copyBlock={copyBlock(o)} canCreate={dhl.canCreate()} canTrack={dhl.canTrack()} onlineSubeUrl={ONLINE_SUBE_URL} />
           </Card>
 
           <Card title={<><User className="h-4 w-4 text-neutral-500" />Müşteri</>} actions={<><Link href={`/mesajlar/${c.id}`} className="btn btn-sm"><MessageCircle className="h-3.5 w-3.5" />Mesajlar</Link><Link href={`/musteriler/${c.id}`} className="btn btn-sm"><Pencil className="h-3.5 w-3.5" />Düzenle</Link></>}>

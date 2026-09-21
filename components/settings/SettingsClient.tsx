@@ -55,7 +55,7 @@ export function SettingsClient({ status: st, settings: s, outbox }: Props) {
 
         <Card title={<><Truck className="h-4 w-4 text-[#d40511]" />DHL eCommerce <Dot on={dhl.can_create || dhl.can_track} /></>}>
           <dl className="kv">
-            <dt>Mod</dt><dd>{dhl.mode === 'api' ? 'API (gönderi panelden oluşturulur)' : 'Manuel (Online Şube + takip numarası)'}</dd>
+            <dt>Mod</dt><dd>{dhl.mode === 'api' ? `API (gönderi panelden oluşturulur · ${dhl.api_env === 'prod' ? 'gerçek sunucu' : 'test sunucusu'})` : 'Manuel (Online Şube + takip numarası)'}</dd>
             <dt>Gönderi</dt><dd>{dhl.can_create ? 'DHL API bağlı' : 'Online Şube üzerinden; takip no panele girilir'}</dd>
             <dt>Takip</dt><dd>{dhl.can_track ? `${dhl.tracking_source} · cron her çalıştığında sorgulanır` : 'Takip API yok · teslimatı panelden işaretleyin'}</dd>
             <dt>Gönderici</dt><dd>{[dhl.sender.name, dhl.sender.phone, dhl.sender.city].filter(Boolean).join(' · ') || <span className="text-neutral-400">.env dosyasında tanımlayın</span>}</dd>
@@ -64,7 +64,7 @@ export function SettingsClient({ status: st, settings: s, outbox }: Props) {
             <a href={dhl.online_sube_url} target="_blank" rel="noopener" className="btn btn-sm"><ExternalLink className="h-3.5 w-3.5" />DHL Online Şube</a>
             <a href="https://developer.dhl.com/" target="_blank" rel="noopener" className="btn btn-sm"><ExternalLink className="h-3.5 w-3.5" />DHL Developer Portal</a>
           </div>
-          <p className="mt-3 text-xs text-neutral-500">Otomatik teslimat algılama için ücretsiz DHL "Shipment Tracking – Unified" API anahtarını <code>DHL_TRACKING_API_KEY</code> olarak ekleyin. DHL şubenizden web servis bilgilerini aldığınızda <code>DHL_MODE=api</code> ile gönderiler panelden oluşturulur.</p>
+          <p className="mt-3 text-xs text-neutral-500">Otomatik teslimat algılama için ücretsiz DHL "Shipment Tracking – Unified" API anahtarını <code>DHL_TRACKING_API_KEY</code> olarak ekleyin. DHL API portalından aldığınız Client Id/Secret ile müşteri numarası ve API şifresini <code>.env</code> dosyasına girip <code>DHL_MODE=api</code> yaptığınızda gönderiler panelden oluşturulur (varsayılan <code>DHL_API_ENV=test</code> deneme sunucusudur).</p>
         </Card>
       </div>
 

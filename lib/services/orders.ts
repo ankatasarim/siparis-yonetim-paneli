@@ -1,8 +1,9 @@
 import * as db from '../db';
 import { cfg } from '../config';
-import { eq, gt, ilike, isIn, isUniqueViolation, lt, or, type Cond, type Row, type Where } from '../store';
+import { eq, gt, ilike, isIn, isNull, isUniqueViolation, lt, or, type Cond, type Row, type Where } from '../store';
 import { httpError, now, normalizeTr, pick, round2, toNumber } from '../utils';
 import { STATUSES, ACTIVE_STATUSES, PAYMENT_STATUSES, SHIPPING_PAYERS, SATISFACTION_LABELS, trackingUrl } from '../constants';
+import * as dhl from '../integrations/dhl';
 import type { Customer, Dashboard, Order, OrderEvent, OrderFull, OrderLine, OrderRow, OrderStatus, PaymentStatus, Satisfaction, Message } from '../types';
 
 /* ---------- Kancalar ----------
@@ -43,7 +44,8 @@ export function normalizeLines(input: unknown): OrderLine[] {
     const qty = Math.max(1, parseInt(String(raw.qty ?? 1), 10) || 1);
     const price = toNumber(raw.price);
     if (price != null && (Number.isNaN(price) || price < 0)) throw httpError(400, `"${name}" için fiyat geçersiz`);
-    out.push({ name, qty, price });
+    const pid = Number(raw.product_id);
+    out.push(Number.isInteger(pid) && pid > 0 ? { name, qty, price, product_id: pid } : { name, qty, price });
   }
   return out;
 }
@@ -196,6 +198,17 @@ export async function list(opts: ListOpts = {}): Promise<{ rows: OrderRow[]; tot
   return { rows: await attachCustomers(rows), total: count ?? rows.length, page, pageSize };
 }
 
+/** DHL toplu gönderi dosyası için siparişler + müşterileri (sipariş numarasına göre sıralı). */
+export async function listForDhlExport(opts: { statuses: OrderStatus[]; skipTracked: boolean }): Promise<{ order: Order; customer: Customer }[]> {
+  const where: Where[] = [isIn('status', opts.statuses)];
+  if (opts.skipTracked) where.push(or([isNull('dhl_tracking_no'), eq('dhl_tracking_no', '')]));
+  const rows = await db.selectAll({ table: 'orders', where, order: [{ col: 'order_no' }] }, 500, 2000);
+  const ids = [...new Set(rows.map((r) => Number(r.customer_id)))];
+  const custs = ids.length ? await db.selectAll<Customer>({ table: 'customers', where: [isIn('id', ids)] }) : [];
+  const map = new Map(custs.map((c) => [c.id, c]));
+  return rows.map((r) => ({ order: hydrate(r) as Order, customer: map.get(Number(r.customer_id)) as Customer })).filter((x) => x.customer);
+}
+
 export async function addEvent(orderId: number | string, type: string, description: string, meta?: Record<string, unknown> | null): Promise<void> {
   await S().insert('order_events', { order_id: Number(orderId), type, description: description || '', meta: meta ? JSON.stringify(meta) : null, created_at: now() });
 }
@@ -239,6 +252,14 @@ export async function update(id: number | string, data: unknown): Promise<OrderF
   const existing = await getRaw(id);
   if (!existing) throw httpError(404, 'Sipariş bulunamadı');
   const f = cleanFields(data);
+  const cid = (data as Record<string, unknown> | null)?.customer_id;
+  if (cid != null && cid !== '' && Number(cid) !== existing.customer_id) {
+    if (!validId(cid as number)) throw httpError(400, 'Geçersiz müşteri');
+    const { rows } = await S().select<Customer>({ table: 'customers', where: [eq('id', Number(cid))], limit: 1 });
+    if (!rows[0]) throw httpError(404, 'Müşteri bulunamadı');
+    f.customer_id = Number(cid);
+    await addEvent(existing.id, 'not', `Müşteri değiştirildi: ${rows[0].name || (rows[0].ig_username ? '@' + rows[0].ig_username : '#' + rows[0].id)}`);
+  }
   if (!Object.keys(f).length) return (await get(id))!;
   const lines = 'lines_json' in f ? (JSON.parse(f.lines_json as string) as OrderLine[]) : existing.lines;
   if (!lines.length) throw httpError(400, 'En az bir ürün satırı girin');
@@ -285,6 +306,16 @@ export async function setStatus(id: number | string, status: OrderStatus, opts: 
   await S().update('orders', [eq('id', order.id)], patch);
   const by = opts.by || 'panel';
   await addEvent(order.id, 'durum', `${from.label} → ${STATUSES[status].label}${opts.note ? ' · ' + opts.note : ''}`, { from: order.status, to: status, by });
+  // DHL API ile oluşturulmuş sipariş (referans + DHL sipariş kaydı) iptal edilince DHL tarafında da iptal dene; başarısızlık akışı durdurmaz.
+  if (status === 'iptal' && order.dhl_tracking_no && order.dhl_shipment_ref && dhl.canCreate()) {
+    try {
+      await dhl.cancelShipment(order.dhl_tracking_no);
+      await addEvent(order.id, 'kargo', `DHL siparişi iptal edildi · Referans: ${order.dhl_tracking_no}`, { reference: order.dhl_tracking_no });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await addEvent(order.id, 'kargo', `DHL iptali yapılamadı: ${msg}`, { reference: order.dhl_tracking_no, error: msg });
+    }
+  }
   await fire('status', { order: (await get(id))!, from: order.status, to: status, by });
   return (await get(id))!;
 }

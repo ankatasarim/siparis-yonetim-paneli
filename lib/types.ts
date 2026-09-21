@@ -8,6 +8,24 @@ export interface OrderLine {
   name: string;
   qty: number;
   price: number | null;
+  /** Katalogdan seçildiyse ürün kimliği (bilgi amaçlı; ad ve fiyat satıra kopyalanır). */
+  product_id?: number | null;
+}
+
+export interface Product {
+  id: number;
+  name: string;
+  price: number | null;
+  description: string;
+  /** Görsel adresi (URL); şimdilik boş olabilir */
+  image: string;
+  /** Ürün desisi (kargo hesabı için); şimdilik 0 */
+  desi: number;
+  /** 1 = aktif (sipariş formunda önerilir), 0 = pasif */
+  active: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Customer {

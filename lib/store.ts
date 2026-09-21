@@ -5,7 +5,7 @@
  * Servisler yalnızca bu arayüzü kullanır; SQL yazılmaz.
  */
 
-export type Table = 'customers' | 'orders' | 'messages' | 'order_events' | 'settings';
+export type Table = 'customers' | 'products' | 'orders' | 'messages' | 'order_events' | 'settings';
 export type Row = Record<string, any>;
 export type Op = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'ilike' | 'is' | 'notnull';
 

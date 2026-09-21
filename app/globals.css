@@ -17,6 +17,9 @@ body { @apply bg-page text-neutral-900 antialiased text-[14px]; }
   .btn-xs { @apply rounded px-2 py-1 text-[11px]; }
   .input { @apply w-full min-w-0 rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-neutral-400 focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-neutral-50 read-only:bg-neutral-50; }
   .label { @apply mb-1 block text-xs font-medium text-neutral-500; }
+  /* Sayfa geçişi ilerleme çubuğu (components/NavProgress.tsx) */
+  @keyframes nav-progress { 0% { width: 0 } 15% { width: 35% } 50% { width: 70% } 100% { width: 92% } }
+  .nav-progress-run { animation: nav-progress 8s cubic-bezier(.2,.6,.3,1) forwards; }
   .th { @apply whitespace-nowrap bg-neutral-50 px-4 py-3 text-left text-xs font-medium text-neutral-500; }
   .td { @apply border-t border-neutral-100 px-4 py-3.5 align-top text-sm; }
   .chip { @apply inline-flex cursor-pointer items-center rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs font-medium text-neutral-700 transition hover:border-neutral-300; }
