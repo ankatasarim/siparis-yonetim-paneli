@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Trash2, Search, X, Instagram } from 'lucide-react';
+import { Plus, Minus, Trash2, Search, X, Instagram, Check } from 'lucide-react';
 import { api, startNav } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import { Card, Field, Avatar } from '@/components/ui';
@@ -13,10 +13,14 @@ import { money } from '@/lib/format';
 import type { Customer, CustomerRow, OrderFull, OrderLine, OrderSource, PaymentStatus, Product, ShippingPayer } from '@/lib/types';
 
 interface LineDraft { name: string; qty: string; price: string; product_id?: number | null; variant: string }
-const toDraft = (l: OrderLine): LineDraft => ({ name: l.name, qty: String(l.qty), price: l.price != null ? String(l.price) : '', product_id: l.product_id ?? null, variant: l.variant || '' });
+const toDraft = (l: OrderLine): LineDraft => ({ name: l.name, qty: String(l.qty), price: fmtPrice(l.price), product_id: l.product_id ?? null, variant: l.variant || '' });
 const emptyLine = (name = ''): LineDraft => ({ name, qty: '1', price: '', product_id: null, variant: '' });
 const norm = (s: string | null | undefined) => (s || '').toLocaleLowerCase('tr');
 const num = (v: string) => { const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+/** Ürün satırı sütunları (sm ve üstü): ürün · adet · birim fiyat · toplam · sil */
+const GRID = 'sm:grid-cols-[minmax(0,1fr)_108px_124px_96px_32px] sm:gap-3';
+/** Fiyatı Türkçe ondalık ayraçla gösterir (62.5 → 62,5); num() geri çevirir. */
+const fmtPrice = (n: number | null | undefined) => (n != null ? String(n).replace('.', ',') : '');
 
 export function OrderForm({ order, customer, prefillText }: { order?: OrderFull; customer?: Customer | null; prefillText?: string }) {
   const router = useRouter();
@@ -74,6 +78,8 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
   const setLine = (i: number, patch: Partial<LineDraft>) => setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const removeLine = (i: number) => setLines(lines.length > 1 ? lines.filter((_, j) => j !== i) : [emptyLine()]);
   const addLine = () => { setLines([...lines, emptyLine()]); setFocusIdx(lines.length); };
+  const stepQty = (i: number, d: number) => setLine(i, { qty: String(Math.max(1, (parseInt(lines[i].qty, 10) || 1) + d)) });
+  const lineCount = lines.reduce((sum, l) => sum + (l.name.trim() ? num(l.qty) || 1 : 0), 0);
   // Satırın ürününde seçenek (renk vb.) tanımlıysa listesi; kayıtlı ama listede olmayan eski seçenek de gösterilir.
   const optionsFor = (l: LineDraft): string[] => {
     const p = l.product_id ? products.find((x) => x.id === l.product_id) : null;
@@ -82,7 +88,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
     return l.variant && !opts.includes(l.variant) ? [l.variant, ...opts] : opts;
   };
   const suggestionsFor = (text: string) => { const t = norm(text.trim()); return (t ? products.filter((p) => norm(p.name).includes(t) || norm(p.description).includes(t)) : products).slice(0, 8); };
-  const pickProduct = (i: number, p: Product) => { setLine(i, { name: p.name, price: p.price != null ? String(p.price) : '', product_id: p.id, variant: '' }); setOpenSug(null); };
+  const pickProduct = (i: number, p: Product) => { setLine(i, { name: p.name, price: fmtPrice(p.price), product_id: p.id, variant: '' }); setOpenSug(null); };
 
   const submit = async () => {
     const validLines = lines.filter((l) => l.name.trim());
@@ -120,58 +126,12 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
       <UnsavedGuard when={dirty} />
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
         <div className="min-w-0 space-y-5">
-          <Card title="Ürünler" pad={false}>
-            <div className="divide-y divide-neutral-100">
-              {lines.map((l, i) => (
-                <div key={i} className="px-4 py-3">
-                  {/* Üst satır: ürün alanı tam genişlik + sil düğmesi. Alt satır: adet, birim fiyat, satır toplamı. */}
-                  <div className="flex items-end gap-2">
-                  <div className="relative min-w-0 flex-1">
-                    <label className="label">Ürün / açıklama</label>
-                    <input value={l.name} onChange={(e) => { setLine(i, { name: e.target.value, product_id: null, variant: '' }); setOpenSug(i); }} onFocus={() => setOpenSug(i)} onBlur={() => setTimeout(() => setOpenSug((v) => (v === i ? null : v)), 150)}
-                      placeholder={products.length ? 'Listeden seçin veya yazın' : 'Örn: İsimli kolye (gümüş)'} className="input" autoComplete="off" autoFocus={i === focusIdx || (focusIdx === null && i === 0 && !isEdit)} />
-                    {openSug === i && suggestionsFor(l.name).length > 0 && (
-                      <div className="absolute left-0 right-0 z-20 mt-1 max-h-64 overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-lg">
-                        {suggestionsFor(l.name).map((p) => (
-                          <button key={p.id} type="button" onMouseDown={(e) => { e.preventDefault(); pickProduct(i, p); }} className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-neutral-50 ${l.product_id === p.id ? 'bg-primary/5' : ''}`}>
-                            <span className="flex min-w-0 items-center gap-2">{p.image && <img src={p.image} alt="" className="h-7 w-7 shrink-0 rounded border border-neutral-200 object-cover" />}<span className="min-w-0"><span className="block truncate font-medium">{p.name}</span>{p.description && <span className="block truncate text-xs text-neutral-500">{p.description}</span>}{p.options && p.options.length > 0 && <span className="block truncate text-xs text-primary-text">{p.options.length} seçenek: {p.options.join(', ')}</span>}</span></span>
-                            <span className="shrink-0 text-neutral-600">{p.price != null ? money(p.price) : '—'}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <button onClick={() => removeLine(i)} className="mb-1 shrink-0 rounded p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-600" title="Satırı sil"><Trash2 className="h-4 w-4" /></button>
-                  </div>
-                  <div className={`mt-3 grid grid-cols-1 gap-3 sm:items-end ${optionsFor(l).length ? 'sm:grid-cols-[minmax(150px,220px)_110px_150px_minmax(0,1fr)]' : 'sm:grid-cols-[110px_150px_minmax(0,1fr)]'}`}>
-                    {optionsFor(l).length > 0 && (
-                      <div>
-                        <label className="label">Renk / seçenek</label>
-                        <select value={l.variant} onChange={(e) => setLine(i, { variant: e.target.value })} className={`input ${l.variant ? '' : 'text-neutral-500'}`}>
-                          <option value="">Seçin…</option>
-                          {optionsFor(l).map((o) => <option key={o} value={o}>{o}</option>)}
-                        </select>
-                      </div>
-                    )}
-                    <div><label className="label">Adet</label><input type="number" min={1} value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} className="input" /></div>
-                    <div><label className="label">Birim fiyat (₺)</label><input value={l.price} onChange={(e) => setLine(i, { price: e.target.value })} inputMode="decimal" placeholder="0,00" className="input" /></div>
-                    <div className="flex items-center justify-between gap-3 rounded-md bg-neutral-50 px-3 py-2 text-sm sm:justify-end"><span className="text-neutral-500">Satır toplamı</span><span className="font-medium">{money(num(l.qty) * num(l.price))}</span></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 px-4 py-3">
-              <button onClick={addLine} className="btn btn-sm"><Plus className="h-3.5 w-3.5" />Ürün ekle</button>
-              <p className="text-xs text-neutral-500">{products.length ? `${products.length} tanımlı ürün · ürün alanına tıklayınca liste açılır` : 'Tanımlı ürün yok'} · <Link href="/urunler" className="text-primary-text hover:underline">Ürünleri yönet</Link></p>
-            </div>
-          </Card>
-
           <Card title="Müşteri" actions={custId ? <span className="text-xs text-neutral-500">Kayıtlı #{custId}{!customer && <button onClick={changeCustomer} className="ml-2 text-primary-text hover:underline">değiştir</button>}</span> : <span className="text-xs text-neutral-500">Yeni müşteri</span>}>
             {!customer && !custId && (
               <div className="mb-4">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Kayıtlı müşteri ara (isim, telefon, @instagram)" className="input pl-9 pr-8" />
+                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Kayıtlı müşteri ara (isim, telefon, @instagram)" className="input pl-9 pr-8" autoFocus={!isEdit} />
                   {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400"><X className="h-4 w-4" /></button>}
                   {results.length > 0 && (
                     <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg">
@@ -199,6 +159,72 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
                 <Field label="İlçe"><input value={cust.district} onChange={(e) => setCust({ ...cust, district: e.target.value })} className="input" /></Field>
                 <Field label="Posta kodu"><input value={cust.postal_code} onChange={(e) => setCust({ ...cust, postal_code: e.target.value })} className="input" /></Field>
               </div>
+            </div>
+          </Card>
+
+          <Card title="Ürünler" pad={false} actions={<span className="text-xs text-neutral-500">{products.length ? `${products.length} tanımlı ürün` : 'Tanımlı ürün yok'} · <Link href="/urunler" className="text-primary-text hover:underline">Ürünleri yönet</Link></span>}>
+            {/* Sütun başlıkları bir kez (sm ve üstü); mobilde her satır: ürün üstte, adet · fiyat · toplam altta tek sırada. */}
+            <div className={`hidden border-b border-neutral-100 bg-neutral-50/70 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-neutral-500 sm:grid ${GRID}`}>
+              <span>Ürün</span><span className="text-center">Adet</span><span className="text-right">Birim fiyat</span><span className="text-right">Toplam</span><span />
+            </div>
+            <div className="divide-y divide-neutral-100">
+              {lines.map((l, i) => {
+                const opts = optionsFor(l);
+                const sugs = openSug === i ? suggestionsFor(l.name) : [];
+                return (
+                  <div key={i} className={`px-4 py-3 sm:grid sm:items-center ${GRID}`}>
+                    {/* Ürün adı (+ katalog önerileri) ve varsa renk / seçenek */}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className="relative min-w-0 flex-1">
+                          <input value={l.name} onChange={(e) => { setLine(i, { name: e.target.value, product_id: null, variant: '' }); setOpenSug(i); }} onFocus={() => setOpenSug(i)} onBlur={() => setTimeout(() => setOpenSug((v) => (v === i ? null : v)), 150)}
+                            placeholder={products.length ? 'Ürün adı yazın veya listeden seçin' : 'Örn: İsimli kolye (gümüş)'} className={`input ${l.product_id ? 'pr-8' : ''}`} autoComplete="off" autoFocus={i === focusIdx} />
+                          {l.product_id != null && <Check className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-500" aria-label="Katalogdan seçildi" />}
+                          {sugs.length > 0 && (
+                            <div className="absolute left-0 top-full z-20 mt-1 w-full min-w-[280px] max-h-72 overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-lg">
+                          {sugs.map((p) => (
+                            <button key={p.id} type="button" onMouseDown={(e) => { e.preventDefault(); pickProduct(i, p); }} className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-neutral-50 ${l.product_id === p.id ? 'bg-primary/5' : ''}`}>
+                              {p.image ? <img src={p.image} alt="" className="h-8 w-8 shrink-0 rounded border border-neutral-200 object-cover" /> : <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-neutral-200 bg-neutral-50 text-base">🎨</span>}
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-medium">{p.name}</span>
+                                {p.options && p.options.length > 0 ? <span className="block truncate text-xs text-primary-text">{p.options.length} seçenek · {p.options.join(', ')}</span> : p.description ? <span className="block truncate text-xs text-neutral-500">{p.description}</span> : null}
+                              </span>
+                              <span className="shrink-0 font-medium text-neutral-700">{p.price != null ? money(p.price) : '—'}</span>
+                            </button>
+                          ))}
+                            </div>
+                          )}
+                        </div>
+                        <button type="button" onClick={() => removeLine(i)} className="shrink-0 rounded-md p-1.5 text-neutral-400 transition hover:bg-red-50 hover:text-red-600 sm:hidden" title="Satırı sil" aria-label="Satırı sil"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                      {opts.length > 0 && (
+                        <select value={l.variant} onChange={(e) => setLine(i, { variant: e.target.value })} aria-label="Renk / seçenek" className={`input mt-1.5 sm:w-52 ${l.variant ? '' : 'border-amber-300 text-neutral-500'}`}>
+                          <option value="">Renk seçin…</option>
+                          {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    {/* Adet · birim fiyat · toplam · sil — mobilde tek sıra, sm ve üstünde ızgara hücreleri (sm:contents) */}
+                    <div className="mt-2 flex items-center gap-2 sm:contents">
+                      <div className="flex shrink-0 items-stretch overflow-hidden rounded-md border border-neutral-300 bg-white sm:justify-self-center">
+                        <button type="button" onClick={() => stepQty(i, -1)} className="px-2 text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900" aria-label="Azalt"><Minus className="h-3.5 w-3.5" /></button>
+                        <input value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} inputMode="numeric" aria-label="Adet" className="w-11 border-x border-neutral-300 py-2 text-center text-sm tabular-nums outline-none focus:bg-primary/5" />
+                        <button type="button" onClick={() => stepQty(i, 1)} className="px-2 text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900" aria-label="Artır"><Plus className="h-3.5 w-3.5" /></button>
+                      </div>
+                      <div className="relative min-w-0 flex-1 sm:flex-none">
+                        <input value={l.price} onChange={(e) => setLine(i, { price: e.target.value })} inputMode="decimal" placeholder="Birim fiyat" aria-label="Birim fiyat" className="input pr-7 text-right tabular-nums" />
+                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-neutral-400">₺</span>
+                      </div>
+                      <div className="ml-auto shrink-0 text-right text-sm font-semibold tabular-nums sm:ml-0">{money(num(l.qty) * num(l.price))}</div>
+                      <button type="button" onClick={() => removeLine(i)} className="hidden shrink-0 rounded-md p-1.5 text-neutral-400 transition hover:bg-red-50 hover:text-red-600 sm:block" title="Satırı sil" aria-label="Satırı sil"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 bg-neutral-50/40 px-4 py-3">
+              <button type="button" onClick={addLine} className="btn btn-sm"><Plus className="h-3.5 w-3.5" />Ürün ekle</button>
+              <p className="text-sm text-neutral-600">{lineCount} ürün · Ara toplam <span className="ml-1 font-semibold text-neutral-900">{money(subtotal)}</span></p>
             </div>
           </Card>
 
