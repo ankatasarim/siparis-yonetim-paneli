@@ -1,6 +1,12 @@
-import { Check, Clock, Truck, XCircle, Lock, Sparkles, Hourglass, HandCoins, Globe, Instagram, type LucideIcon } from 'lucide-react';
-import { STATUSES, PAYMENT_STATUSES, MESSAGE_STATUS_LABELS } from '@/lib/constants';
-import type { OrderStatus, PaymentStatus } from '@/lib/types';
+import { Check, Clock, Truck, XCircle, Lock, Sparkles, Hourglass, HandCoins, Globe, Instagram, MessageCircle, ShoppingBag, type LucideIcon } from 'lucide-react';
+import { STATUSES, PAYMENT_STATUSES, MESSAGE_STATUS_LABELS, ORDER_SOURCES } from '@/lib/constants';
+import type { OrderSource, OrderStatus, PaymentStatus } from '@/lib/types';
+
+const SOURCE_ICONS: Record<OrderSource, { icon: LucideIcon; color: string }> = {
+  instagram: { icon: Instagram, color: 'text-pink-600' },
+  whatsapp: { icon: MessageCircle, color: 'text-emerald-600' },
+  shopier: { icon: ShoppingBag, color: 'text-blue-600' },
+};
 
 const STATUS_ICONS: Record<OrderStatus, LucideIcon> = { yeni: Sparkles, hazirlaniyor: Clock, kargoya_verildi: Truck, teslim_edildi: Check, kapandi: Lock, iptal: XCircle };
 const PAY_ICONS: Record<PaymentStatus, LucideIcon> = { alindi: Check, bekleniyor: Hourglass, kapida_odeme: HandCoins };
@@ -24,7 +30,10 @@ export function MsgStatusPill({ status }: { status: string }) {
   return <span className={`${base} ${cls}`}>{MESSAGE_STATUS_LABELS[status] || status}</span>;
 }
 
-export function SourcePill({ source, website }: { source: string; website?: string }) {
-  if (source === 'instagram') return <span className="inline-flex items-center gap-1.5 text-sm text-neutral-800"><Instagram className="h-4 w-4 text-pink-600" />Instagram</span>;
-  return <span className="inline-flex items-center gap-1.5 text-sm text-neutral-800"><Globe className="h-4 w-4 text-neutral-500" />{website || source}</span>;
+/** Sipariş kanalı: Instagram / WhatsApp / Shopier; tanımsız eski değerler olduğu gibi yazılır. */
+export function SourcePill({ source, className = '' }: { source: string; className?: string }) {
+  const meta = SOURCE_ICONS[source as OrderSource];
+  const Icon = meta ? meta.icon : Globe;
+  const label = ORDER_SOURCES[source as OrderSource]?.label || source || '—';
+  return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-sm text-neutral-800 ${className}`}><Icon className={`h-4 w-4 ${meta ? meta.color : 'text-neutral-500'}`} />{label}</span>;
 }

@@ -8,11 +8,13 @@ import { PageHeader } from '@/components/PageHeader';
 import { Field, Empty } from '@/components/ui';
 import { Spinner } from '@/components/Loading';
 import { money } from '@/lib/format';
+import { STANDARD_COLORS } from '@/lib/constants';
 import type { Product } from '@/lib/types';
 
-interface Draft { name: string; price: string; description: string; image: string; desi: string; active: boolean }
-const EMPTY: Draft = { name: '', price: '', description: '', image: '', desi: '0', active: true };
-const toDraft = (p: Product): Draft => ({ name: p.name, price: p.price != null ? String(p.price) : '', description: p.description || '', image: p.image || '', desi: String(p.desi ?? 0), active: p.active !== 0 });
+interface Draft { name: string; price: string; description: string; image: string; desi: string; options: string; active: boolean }
+const EMPTY: Draft = { name: '', price: '', description: '', image: '', desi: '0', options: '', active: true };
+const toDraft = (p: Product): Draft => ({ name: p.name, price: p.price != null ? String(p.price) : '', description: p.description || '', image: p.image || '', desi: String(p.desi ?? 0), options: (p.options || []).join(', '), active: p.active !== 0 });
+const optionsText = (p: Product) => (p.options || []).join(', ');
 const fmtDesi = (d: number | null | undefined) => (d ? String(d).replace('.', ',') : '0');
 const norm = (s: string | null | undefined) => (s || '').toLocaleLowerCase('tr');
 const byName = (a: Product, b: Product) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'tr');
@@ -38,7 +40,7 @@ export function ProductsClient({ initial }: { initial: Product[] }) {
   const save = async () => {
     if (!draft.name.trim()) return toast('Ürün adı gerekli', 'err');
     setBusy(true);
-    const payload = { name: draft.name, price: draft.price.trim() === '' ? null : draft.price, description: draft.description, image: draft.image, desi: draft.desi.trim() === '' ? 0 : draft.desi, active: draft.active };
+    const payload = { name: draft.name, price: draft.price.trim() === '' ? null : draft.price, description: draft.description, image: draft.image, desi: draft.desi.trim() === '' ? 0 : draft.desi, options: draft.options, active: draft.active };
     try {
       if (editing === 'new') {
         const p = await api.post<Product>('/api/products', payload);
@@ -100,6 +102,7 @@ export function ProductsClient({ initial }: { initial: Product[] }) {
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{p.name}</p>
                 <p className="text-xs text-neutral-500">{p.description || '—'}</p>
+                {optionsText(p) && <p className="text-xs text-primary-text">Seçenekler: {optionsText(p)}</p>}
                 <p className="text-xs text-neutral-500">Desi: {fmtDesi(p.desi)}</p>
               </div>
               <p className="shrink-0 font-semibold">{p.price != null ? money(p.price) : <span className="font-normal text-neutral-400">fiyat yok</span>}</p>
@@ -125,7 +128,7 @@ export function ProductsClient({ initial }: { initial: Product[] }) {
                   <td className="td">
                     <div className="flex items-center gap-3">
                       {p.image ? <img src={p.image} alt="" className="h-9 w-9 shrink-0 rounded-md border border-neutral-200 object-cover" /> : <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-neutral-50 text-base">🎨</div>}
-                      <div className="min-w-0"><p className="font-medium">{p.name}</p>{p.description && <p className="max-w-md truncate text-xs text-neutral-500">{p.description}</p>}</div>
+                      <div className="min-w-0"><p className="font-medium">{p.name}</p>{p.description && <p className="max-w-md truncate text-xs text-neutral-500">{p.description}</p>}{optionsText(p) && <p className="max-w-md truncate text-xs text-primary-text">Seçenekler: {optionsText(p)}</p>}</div>
                     </div>
                   </td>
                   <td className="td text-right font-medium">{p.price != null ? money(p.price) : <span className="font-normal text-neutral-400">—</span>}</td>
@@ -152,7 +155,13 @@ export function ProductsClient({ initial }: { initial: Product[] }) {
           <Field label="Fiyat (₺)" hint="Boş bırakılırsa siparişte elle girilir."><input value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} inputMode="decimal" className="input" placeholder="0,00" /></Field>
           <Field label="Desi" hint="Kargo hesabı için; şimdilik 0 bırakabilirsiniz."><input value={draft.desi} onChange={(e) => setDraft({ ...draft, desi: e.target.value })} inputMode="decimal" className="input" placeholder="0" /></Field>
           <Field label="Görsel adresi (URL)" hint="Şimdilik boş kalabilir." className="sm:col-span-2"><input value={draft.image} onChange={(e) => setDraft({ ...draft, image: e.target.value })} className="input" placeholder="https://…/urun.jpg" /></Field>
-          <Field label="Açıklama" className="sm:col-span-2"><textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} className="input min-h-[60px]" placeholder="Malzeme, ölçü, renk seçenekleri…" /></Field>
+          <Field label="Açıklama" className="sm:col-span-2"><textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} className="input min-h-[60px]" placeholder="Malzeme, ölçü…" /></Field>
+          <Field label="Seçenekler (renk vb.)" hint="Virgülle ayırın. Sipariş formunda bu ürün seçilince satırda seçim kutusu çıkar." className="sm:col-span-2">
+            <div className="flex gap-2">
+              <input value={draft.options} onChange={(e) => setDraft({ ...draft, options: e.target.value })} className="input" placeholder="Kırmızı, Sarı, Mavi…" />
+              <button type="button" onClick={() => setDraft({ ...draft, options: STANDARD_COLORS.join(', ') })} className="btn btn-sm shrink-0" title={STANDARD_COLORS.join(', ')}>9 renk</button>
+            </div>
+          </Field>
           <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} className="h-4 w-4 rounded border-neutral-300 text-primary" />Aktif (sipariş formunda önerilsin)</label>
         </div>
       </Modal>

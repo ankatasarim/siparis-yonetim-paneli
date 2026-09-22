@@ -2,9 +2,9 @@ import * as db from '../db';
 import { cfg } from '../config';
 import { eq, gt, ilike, isIn, isNull, isUniqueViolation, lt, or, type Cond, type Row, type Where } from '../store';
 import { httpError, now, normalizeTr, pick, round2, toNumber } from '../utils';
-import { STATUSES, ACTIVE_STATUSES, PAYMENT_STATUSES, SHIPPING_PAYERS, SATISFACTION_LABELS, trackingUrl } from '../constants';
+import { STATUSES, ACTIVE_STATUSES, PAYMENT_STATUSES, SHIPPING_PAYERS, SATISFACTION_LABELS, ORDER_SOURCES, DEFAULT_SOURCE, trackingUrl } from '../constants';
 import * as dhl from '../integrations/dhl';
-import type { Customer, Dashboard, Order, OrderEvent, OrderFull, OrderLine, OrderRow, OrderStatus, PaymentStatus, Satisfaction, Message } from '../types';
+import type { Customer, Dashboard, Order, OrderEvent, OrderFull, OrderLine, OrderRow, OrderSource, OrderStatus, PaymentStatus, Satisfaction, Message } from '../types';
 
 /* ---------- Kancalar ----------
  * Serverless ortamda (Vercel) yanıt döndükten sonra arka planda çalışan iş kesilir; bu yüzden
@@ -45,12 +45,15 @@ export function normalizeLines(input: unknown): OrderLine[] {
     const price = toNumber(raw.price);
     if (price != null && (Number.isNaN(price) || price < 0)) throw httpError(400, `"${name}" için fiyat geçersiz`);
     const pid = Number(raw.product_id);
-    out.push(Number.isInteger(pid) && pid > 0 ? { name, qty, price, product_id: pid } : { name, qty, price });
+    const line: OrderLine = Number.isInteger(pid) && pid > 0 ? { name, qty, price, product_id: pid } : { name, qty, price };
+    const variant = String(raw.variant ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (variant) line.variant = variant;
+    out.push(line);
   }
   return out;
 }
 
-export const linesSummary = (lines: OrderLine[]) => lines.map((l) => `${l.qty}× ${l.name}`).join(', ');
+export const linesSummary = (lines: OrderLine[]) => lines.map((l) => `${l.qty}× ${l.name}${l.variant ? ` (${l.variant})` : ''}`).join(', ');
 
 export function calcTotals(lines: OrderLine[], shippingFee: number) {
   const subtotal = round2(lines.reduce((s, l) => s + l.qty * (l.price || 0), 0));
@@ -67,7 +70,11 @@ function cleanFields(data: unknown): Record<string, unknown> {
   }
   if ('notes' in d) out.notes = String(d.notes || '').trim();
   if ('labels' in d) out.labels = String(d.labels || '').trim();
-  if ('source' in d) out.source = String(d.source || 'instagram').trim() || 'instagram';
+  if ('source' in d) {
+    const s = String(d.source || DEFAULT_SOURCE).trim().toLowerCase();
+    if (!ORDER_SOURCES[s as OrderSource]) throw httpError(400, 'Geçersiz sipariş kanalı');
+    out.source = s;
+  }
   if ('desi' in d) {
     const v = toNumber(d.desi);
     if (v != null && (Number.isNaN(v) || v < 0)) throw httpError(400, 'Desi geçersiz');
@@ -219,7 +226,7 @@ export async function create(data: Record<string, unknown>): Promise<OrderFull> 
   if (!customer) throw httpError(404, 'Müşteri bulunamadı');
   const f = {
     lines_json: '[]', items: '', notes: '', labels: '', desi: null as number | null, package_count: 1,
-    shipping_payer: 'gonderici', shipping_fee: 0, payment_status: 'bekleniyor', payment_method: '', source: 'instagram',
+    shipping_payer: 'gonderici', shipping_fee: 0, payment_status: 'bekleniyor', payment_method: '', source: DEFAULT_SOURCE,
     ...cleanFields(data),
   } as Record<string, unknown>;
   const lines = JSON.parse(f.lines_json as string) as OrderLine[];
@@ -242,7 +249,7 @@ export async function create(data: Record<string, unknown>): Promise<OrderFull> 
       throw e;
     }
   }
-  await addEvent(id, 'olusturuldu', `Sipariş oluşturuldu (${f.source === 'instagram' ? 'Instagram' : f.source})`);
+  await addEvent(id, 'olusturuldu', `Sipariş oluşturuldu (${ORDER_SOURCES[f.source as OrderSource]?.label || f.source})`);
   if (f.payment_status === 'alindi') await addEvent(id, 'odeme', `Ödeme alındı${f.payment_method ? ' · ' + f.payment_method : ''}`);
   await fire('created', (await get(id))!);
   return (await get(id))!;

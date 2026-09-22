@@ -1,18 +1,22 @@
 import Link from 'next/link';
-import { Upload, Instagram, Package, ChevronRight } from 'lucide-react';
+import { Upload, Package, ChevronRight } from 'lucide-react';
 import { ready, orders } from '@/lib/services';
 import { PageHeader } from '@/components/PageHeader';
 import { OrdersToolbar } from '@/components/orders/OrdersToolbar';
 import { Pagination } from '@/components/Pagination';
 import { RowLink } from '@/components/RowLink';
-import { PaymentPill } from '@/components/Pills';
+import { PaymentPill, SourcePill } from '@/components/Pills';
 import { StatusMenu } from '@/components/orders/StatusMenu';
 import { DhlExportButton } from '@/components/orders/DhlExportButton';
+import { CartPopup } from '@/components/orders/CartPopup';
 import { Empty } from '@/components/ui';
 import { SATISFACTION_LABELS } from '@/lib/constants';
-import { money, fmtDay, fmtTime, fmtShort, trunc } from '@/lib/format';
+import { fmtDay, fmtTime, fmtShort, trunc } from '@/lib/format';
+import type { OrderRow } from '@/lib/types';
 
 type SP = Record<string, string | undefined>;
+/** Sepet penceresine yalnızca gereken alanlar gider (satır verisi istemciye küçük kalsın). */
+const cart = (o: OrderRow) => ({ id: o.id, order_no: o.order_no, lines: o.lines, subtotal: o.subtotal, shipping_fee: o.shipping_fee, total: o.total, shipping_payer: o.shipping_payer, labels: o.labels });
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
@@ -43,17 +47,18 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <div className="space-y-3 md:hidden">
         {rows.map((o) => (
           <div key={o.id} className="card px-4 py-3">
-            <Link href={`/siparisler/${o.id}`} className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+            <div className="flex items-start justify-between gap-3">
+              <Link href={`/siparisler/${o.id}`} className="min-w-0 flex-1">
                 <p className="text-sm"><span className="font-semibold">#{o.order_no}</span> <span className="text-neutral-500">· {fmtShort(o.created_at)}</span></p>
                 <p className="truncate font-medium">{custName(o)}</p>
                 <p className="truncate text-xs text-neutral-500">{o.items || '—'}</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1"><span className="font-semibold">{money(o.total)}</span><ChevronRight className="h-4 w-4 text-neutral-400" /></div>
-            </Link>
+              </Link>
+              <div className="flex shrink-0 items-center gap-1"><CartPopup order={cart(o)} compact /><Link href={`/siparisler/${o.id}`} aria-label="Sipariş detayı"><ChevronRight className="h-4 w-4 text-neutral-400" /></Link></div>
+            </div>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <StatusMenu id={o.id} orderNo={o.order_no} status={o.status} hasTracking={Boolean(o.dhl_tracking_no)} />
               <PaymentPill status={o.payment_status} />
+              <SourcePill source={o.source} className="!text-xs text-neutral-600" />
               {o.dhl_tracking_no && <span className="font-mono text-[11px] text-neutral-500">📦 {o.dhl_tracking_no}</span>}
             </div>
           </div>
@@ -81,7 +86,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             </thead>
             <tbody>
               {rows.map((o) => {
-                const count = o.lines.reduce((s, l) => s + l.qty, 0);
                 return (
                   <RowLink key={o.id} href={`/siparisler/${o.id}`}>
                     <td className="td font-semibold">{o.order_no}</td>
@@ -95,8 +99,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                       {o.satisfaction && o.status === 'teslim_edildi' && <div className="mt-1 text-xs text-neutral-500">{SATISFACTION_LABELS[o.satisfaction]}</div>}
                     </td>
                     <td className="td"><PaymentPill status={o.payment_status} /></td>
-                    <td className="td whitespace-nowrap"><div className="font-medium">{money(o.total)}</div><div className="text-xs text-primary-text">{count} ürün</div></td>
-                    <td className="td whitespace-nowrap"><span className="inline-flex items-center gap-1.5"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-neutral-100"><Instagram className="h-3.5 w-3.5 text-pink-600" /></span>Instagram</span></td>
+                    <td className="td whitespace-nowrap"><CartPopup order={cart(o)} /></td>
+                    <td className="td whitespace-nowrap"><SourcePill source={o.source} /></td>
                     <td className="td text-xs">{o.dhl_tracking_no ? <><div className="font-mono">{o.dhl_tracking_no}</div><div className="text-neutral-500">{o.dhl_status_text || ''}</div></> : <span className="text-neutral-400">—</span>}</td>
                     <td className="td text-xs text-neutral-600">{o.labels ? trunc(o.labels, 48) : <span className="text-neutral-400">—</span>}</td>
                   </RowLink>

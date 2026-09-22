@@ -13,7 +13,7 @@ const HAS_ID = new Set<Table>(['customers', 'products', 'orders', 'messages', 'o
 /** Veritabanındaki sütun varsayılanları: eksik alanlar undefined yerine bu değerlerle doldurulur. */
 const DEFAULTS: Record<Table, Row> = {
   customers: { ig_user_id: null, ig_username: null, name: '', email: '', phone: '', address: '', city: '', district: '', postal_code: '', notes: '', profile_pic: null },
-  products: { price: null, description: '', image: '', desi: 0, active: 1, sort_order: 0 },
+  products: { price: null, description: '', image: '', desi: 0, options_json: '[]', active: 1, sort_order: 0 },
   orders: {
     status: 'yeni', payment_status: 'bekleniyor', payment_method: '', shipping_payer: 'gonderici', lines_json: '[]', items: '', notes: '', labels: '', desi: null,
     package_count: 1, shipping_fee: 0, subtotal: 0, total: 0, source: 'instagram', dhl_tracking_no: null, dhl_shipment_ref: null, dhl_status: null, dhl_status_text: null,

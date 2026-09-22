@@ -3,6 +3,8 @@ export type PaymentStatus = 'bekleniyor' | 'alindi' | 'kapida_odeme';
 export type ShippingPayer = 'gonderici' | 'alici';
 export type Satisfaction = 'bekleniyor' | 'memnun' | 'memnun_degil' | 'cevaplandi' | 'cevapsiz';
 export type MessageStatus = 'ok' | 'pending' | 'failed' | 'manual_sent';
+/** Siparişin geldiği kanal */
+export type OrderSource = 'instagram' | 'whatsapp' | 'shopier';
 
 export interface OrderLine {
   name: string;
@@ -10,6 +12,8 @@ export interface OrderLine {
   price: number | null;
   /** Katalogdan seçildiyse ürün kimliği (bilgi amaçlı; ad ve fiyat satıra kopyalanır). */
   product_id?: number | null;
+  /** Seçilen ürün seçeneği (renk vb.); ürünün options listesinden gelir. */
+  variant?: string | null;
 }
 
 export interface Product {
@@ -21,6 +25,8 @@ export interface Product {
   image: string;
   /** Ürün desisi (kargo hesabı için); şimdilik 0 */
   desi: number;
+  /** Seçenekler (renk vb.); doluysa sipariş formunda satırda seçim kutusu çıkar. DB'de options_json. */
+  options: string[];
   /** 1 = aktif (sipariş formunda önerilir), 0 = pasif */
   active: number;
   sort_order: number;
@@ -69,6 +75,7 @@ export interface Order {
   shipping_fee: number;
   subtotal: number;
   total: number;
+  /** Sipariş kanalı (OrderSource); eski kayıtlarda serbest metin olabilir */
   source: string;
   dhl_tracking_no: string | null;
   dhl_shipment_ref: string | null;

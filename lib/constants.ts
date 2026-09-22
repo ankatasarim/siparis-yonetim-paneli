@@ -1,4 +1,4 @@
-import type { OrderStatus, PaymentStatus, Satisfaction, ShippingPayer } from './types';
+import type { OrderSource, OrderStatus, PaymentStatus, Satisfaction, ShippingPayer } from './types';
 
 export const STATUSES: Record<OrderStatus, { label: string; next: OrderStatus[]; pill: string; dot: string }> = {
   yeni:            { label: 'Yeni Sipariş',    next: ['hazirlaniyor', 'iptal'],    pill: 'border-blue-300 text-blue-700 bg-blue-50',        dot: 'bg-blue-500' },
@@ -33,6 +33,17 @@ export const SATISFACTION_LABELS: Record<Satisfaction, string> = {
 
 export const PAYMENT_METHODS = ['Havale / EFT', 'Kapıda ödeme', 'Kredi kartı', 'Diğer'];
 
+/** Sipariş kanalları (sipariş formunda seçilir, listede ve detayda gösterilir). */
+export const ORDER_SOURCES: Record<OrderSource, { label: string }> = {
+  instagram: { label: 'Instagram' },
+  whatsapp: { label: 'WhatsApp' },
+  shopier: { label: 'Shopier' },
+};
+export const DEFAULT_SOURCE: OrderSource = 'instagram';
+
+/** Boya ürünleri için standart 9 renk; ürün formunda tek tıkla seçenek olarak doldurulur. */
+export const STANDARD_COLORS = ['Kırmızı', 'Sarı', 'Mavi', 'Yeşil', 'Turuncu', 'Mor', 'Pembe', 'Siyah', 'Beyaz'];
+
 export const DHL_STATUS_TEXT: Record<string, string> = {
   created: 'Gönderi oluşturuldu',
   in_transit: 'Yolda',
@@ -59,4 +70,4 @@ export const MESSAGE_STATUS_LABELS: Record<string, string> = {
 };
 
 export const ONLINE_SUBE_URL = 'https://onlinesube.dhlecommerce.com.tr/';
-export const trackingUrl = (no: string) => `https://www.dhl.com/tr-tr/home/tracking.html?tracking-id=${encodeURIComponent(no)}`;
+export const trackingUrl = (no: string) => `https://kargotakip.dhlecommerce.com.tr/?takipNo=${encodeURIComponent(no)}`;

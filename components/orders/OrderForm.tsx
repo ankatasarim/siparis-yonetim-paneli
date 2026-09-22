@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Plus, Trash2, Search, X, Instagram } from 'lucide-react';
@@ -7,12 +7,14 @@ import { api, startNav } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import { Card, Field, Avatar } from '@/components/ui';
 import { Spinner } from '@/components/Loading';
-import { PAYMENT_STATUSES, SHIPPING_PAYERS, PAYMENT_METHODS } from '@/lib/constants';
+import { UnsavedGuard } from '@/components/UnsavedGuard';
+import { PAYMENT_STATUSES, SHIPPING_PAYERS, PAYMENT_METHODS, ORDER_SOURCES, DEFAULT_SOURCE } from '@/lib/constants';
 import { money } from '@/lib/format';
-import type { Customer, CustomerRow, OrderFull, OrderLine, PaymentStatus, Product, ShippingPayer } from '@/lib/types';
+import type { Customer, CustomerRow, OrderFull, OrderLine, OrderSource, PaymentStatus, Product, ShippingPayer } from '@/lib/types';
 
-interface LineDraft { name: string; qty: string; price: string; product_id?: number | null }
-const toDraft = (l: OrderLine): LineDraft => ({ name: l.name, qty: String(l.qty), price: l.price != null ? String(l.price) : '', product_id: l.product_id ?? null });
+interface LineDraft { name: string; qty: string; price: string; product_id?: number | null; variant: string }
+const toDraft = (l: OrderLine): LineDraft => ({ name: l.name, qty: String(l.qty), price: l.price != null ? String(l.price) : '', product_id: l.product_id ?? null, variant: l.variant || '' });
+const emptyLine = (name = ''): LineDraft => ({ name, qty: '1', price: '', product_id: null, variant: '' });
 const norm = (s: string | null | undefined) => (s || '').toLocaleLowerCase('tr');
 const num = (v: string) => { const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; };
 
@@ -22,7 +24,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
   const isEdit = Boolean(order);
   const c0 = customer || order?.customer || null;
 
-  const [lines, setLines] = useState<LineDraft[]>(order?.lines.length ? order.lines.map(toDraft) : [{ name: prefillText || '', qty: '1', price: '' }]);
+  const [lines, setLines] = useState<LineDraft[]>(order?.lines.length ? order.lines.map(toDraft) : [emptyLine(prefillText || '')]);
   const [custId, setCustId] = useState<number | null>(c0?.id ?? null);
   const [cust, setCust] = useState({ name: c0?.name || '', email: c0?.email || '', phone: c0?.phone || '', address: c0?.address || '', city: c0?.city || '', district: c0?.district || '', postal_code: c0?.postal_code || '', ig_username: c0?.ig_username || '' });
   const [igLinked, setIgLinked] = useState(Boolean(c0?.ig_user_id));
@@ -30,6 +32,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
     notes: order?.notes || '', labels: order?.labels || '', desi: order?.desi != null ? String(order.desi) : '', package_count: String(order?.package_count || 1),
     shipping_payer: (order?.shipping_payer || 'gonderici') as ShippingPayer, shipping_fee: String(order?.shipping_fee || 0),
     payment_status: (order?.payment_status || 'bekleniyor') as PaymentStatus, payment_method: order?.payment_method || '',
+    source: (order?.source && order.source in ORDER_SOURCES ? order.source : DEFAULT_SOURCE) as OrderSource,
   });
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<CustomerRow[]>([]);
@@ -38,6 +41,11 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
   const [products, setProducts] = useState<Product[]>([]);
   const [openSug, setOpenSug] = useState<number | null>(null);
   const [focusIdx, setFocusIdx] = useState<number | null>(null);
+  // Kaydedilmemiş değişiklik: formun ilk haliyle karşılaştırılır. Kaydedildikten sonra yönlendirme sorulmaz.
+  const snapshot = JSON.stringify({ lines, custId, cust, f });
+  const initialSnap = useRef(snapshot);
+  const [saved, setSaved] = useState(false);
+  const dirty = !saved && snapshot !== initialSnap.current;
   useEffect(() => { api.get<Product[]>('/api/products?active=1').then(setProducts).catch(() => { /* katalog yoksa öneri gösterilmez */ }); }, []);
 
   useEffect(() => {
@@ -64,30 +72,41 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
   const subtotal = lines.reduce((s, l) => s + num(l.qty) * num(l.price), 0);
   const total = subtotal + num(f.shipping_fee);
   const setLine = (i: number, patch: Partial<LineDraft>) => setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
-  const removeLine = (i: number) => setLines(lines.length > 1 ? lines.filter((_, j) => j !== i) : [{ name: '', qty: '1', price: '' }]);
-  const addLine = () => { setLines([...lines, { name: '', qty: '1', price: '', product_id: null }]); setFocusIdx(lines.length); };
+  const removeLine = (i: number) => setLines(lines.length > 1 ? lines.filter((_, j) => j !== i) : [emptyLine()]);
+  const addLine = () => { setLines([...lines, emptyLine()]); setFocusIdx(lines.length); };
+  // Satırın ürününde seçenek (renk vb.) tanımlıysa listesi; kayıtlı ama listede olmayan eski seçenek de gösterilir.
+  const optionsFor = (l: LineDraft): string[] => {
+    const p = l.product_id ? products.find((x) => x.id === l.product_id) : null;
+    const opts = p?.options || [];
+    if (!opts.length) return [];
+    return l.variant && !opts.includes(l.variant) ? [l.variant, ...opts] : opts;
+  };
   const suggestionsFor = (text: string) => { const t = norm(text.trim()); return (t ? products.filter((p) => norm(p.name).includes(t) || norm(p.description).includes(t)) : products).slice(0, 8); };
-  const pickProduct = (i: number, p: Product) => { setLine(i, { name: p.name, price: p.price != null ? String(p.price) : '', product_id: p.id }); setOpenSug(null); };
+  const pickProduct = (i: number, p: Product) => { setLine(i, { name: p.name, price: p.price != null ? String(p.price) : '', product_id: p.id, variant: '' }); setOpenSug(null); };
 
   const submit = async () => {
     const validLines = lines.filter((l) => l.name.trim());
     if (!validLines.length) return toast('En az bir ürün girin', 'err');
+    const noVariant = validLines.find((l) => optionsFor(l).length > 0 && !l.variant.trim());
+    if (noVariant) return toast(`"${noVariant.name.trim()}" için renk / seçenek seçin`, 'err');
     if (!cust.name.trim() && !custId) return toast('Müşteri adı gerekli', 'err');
     setBusy(true);
     const payload = {
-      customer: cust, lines: validLines.map((l) => ({ name: l.name.trim(), qty: num(l.qty) || 1, price: l.price.trim() === '' ? null : num(l.price), product_id: l.product_id ?? null })),
+      customer: cust, lines: validLines.map((l) => ({ name: l.name.trim(), qty: num(l.qty) || 1, price: l.price.trim() === '' ? null : num(l.price), product_id: l.product_id ?? null, variant: l.variant.trim() || null })),
       notes: f.notes, labels: f.labels, desi: f.desi, package_count: f.package_count, shipping_payer: f.shipping_payer, shipping_fee: f.shipping_fee,
-      payment_status: f.payment_status, payment_method: f.payment_method,
+      payment_status: f.payment_status, payment_method: f.payment_method, source: f.source,
     };
     try {
       if (isEdit) {
         await api.put(`/api/orders/${order!.id}`, { ...payload, customer_id: custId });
         toast('Sipariş güncellendi', 'ok');
+        setSaved(true);
         startNav();
         router.push(`/siparisler/${order!.id}`);
       } else {
         const o = await api.post('/api/orders', custId ? { ...payload, customer_id: custId } : payload);
         toast(`Sipariş #${o.order_no} oluşturuldu`, 'ok');
+        setSaved(true);
         startNav();
         router.push(`/siparisler/${o.id}`);
       }
@@ -98,6 +117,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24 pt-5 md:px-6 md:pb-6">
+      <UnsavedGuard when={dirty} />
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
         <div className="min-w-0 space-y-5">
           <Card title="Ürünler" pad={false}>
@@ -108,13 +128,13 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
                   <div className="flex items-end gap-2">
                   <div className="relative min-w-0 flex-1">
                     <label className="label">Ürün / açıklama</label>
-                    <input value={l.name} onChange={(e) => { setLine(i, { name: e.target.value, product_id: null }); setOpenSug(i); }} onFocus={() => setOpenSug(i)} onBlur={() => setTimeout(() => setOpenSug((v) => (v === i ? null : v)), 150)}
+                    <input value={l.name} onChange={(e) => { setLine(i, { name: e.target.value, product_id: null, variant: '' }); setOpenSug(i); }} onFocus={() => setOpenSug(i)} onBlur={() => setTimeout(() => setOpenSug((v) => (v === i ? null : v)), 150)}
                       placeholder={products.length ? 'Listeden seçin veya yazın' : 'Örn: İsimli kolye (gümüş)'} className="input" autoComplete="off" autoFocus={i === focusIdx || (focusIdx === null && i === 0 && !isEdit)} />
                     {openSug === i && suggestionsFor(l.name).length > 0 && (
                       <div className="absolute left-0 right-0 z-20 mt-1 max-h-64 overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-lg">
                         {suggestionsFor(l.name).map((p) => (
                           <button key={p.id} type="button" onMouseDown={(e) => { e.preventDefault(); pickProduct(i, p); }} className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-neutral-50 ${l.product_id === p.id ? 'bg-primary/5' : ''}`}>
-                            <span className="flex min-w-0 items-center gap-2">{p.image && <img src={p.image} alt="" className="h-7 w-7 shrink-0 rounded border border-neutral-200 object-cover" />}<span className="min-w-0"><span className="block truncate font-medium">{p.name}</span>{p.description && <span className="block truncate text-xs text-neutral-500">{p.description}</span>}</span></span>
+                            <span className="flex min-w-0 items-center gap-2">{p.image && <img src={p.image} alt="" className="h-7 w-7 shrink-0 rounded border border-neutral-200 object-cover" />}<span className="min-w-0"><span className="block truncate font-medium">{p.name}</span>{p.description && <span className="block truncate text-xs text-neutral-500">{p.description}</span>}{p.options && p.options.length > 0 && <span className="block truncate text-xs text-primary-text">{p.options.length} seçenek: {p.options.join(', ')}</span>}</span></span>
                             <span className="shrink-0 text-neutral-600">{p.price != null ? money(p.price) : '—'}</span>
                           </button>
                         ))}
@@ -123,7 +143,16 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
                   </div>
                   <button onClick={() => removeLine(i)} className="mb-1 shrink-0 rounded p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-600" title="Satırı sil"><Trash2 className="h-4 w-4" /></button>
                   </div>
-                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[110px_150px_minmax(0,1fr)] sm:items-end">
+                  <div className={`mt-3 grid grid-cols-1 gap-3 sm:items-end ${optionsFor(l).length ? 'sm:grid-cols-[minmax(150px,220px)_110px_150px_minmax(0,1fr)]' : 'sm:grid-cols-[110px_150px_minmax(0,1fr)]'}`}>
+                    {optionsFor(l).length > 0 && (
+                      <div>
+                        <label className="label">Renk / seçenek</label>
+                        <select value={l.variant} onChange={(e) => setLine(i, { variant: e.target.value })} className={`input ${l.variant ? '' : 'text-neutral-500'}`}>
+                          <option value="">Seçin…</option>
+                          {optionsFor(l).map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+                    )}
                     <div><label className="label">Adet</label><input type="number" min={1} value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} className="input" /></div>
                     <div><label className="label">Birim fiyat (₺)</label><input value={l.price} onChange={(e) => setLine(i, { price: e.target.value })} inputMode="decimal" placeholder="0,00" className="input" /></div>
                     <div className="flex items-center justify-between gap-3 rounded-md bg-neutral-50 px-3 py-2 text-sm sm:justify-end"><span className="text-neutral-500">Satır toplamı</span><span className="font-medium">{money(num(l.qty) * num(l.price))}</span></div>
@@ -182,6 +211,10 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
         </div>
 
         <aside className="space-y-5">
+          <Card title="Sipariş Kanalı">
+            <select value={f.source} onChange={(e) => setF({ ...f, source: e.target.value as OrderSource })} className="input">{(Object.keys(ORDER_SOURCES) as OrderSource[]).map((k) => <option key={k} value={k}>{ORDER_SOURCES[k].label}</option>)}</select>
+            <p className="mt-1.5 text-xs text-neutral-500">Siparişin geldiği yer: Instagram DM, WhatsApp ya da Shopier.</p>
+          </Card>
           <Card title="Özet">
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between text-neutral-600"><dt>Ara Toplam</dt><dd>{money(subtotal)}</dd></div>

@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, Instagram, MessageCircle, Pencil, Truck, User } 
 import { ready, orders, messaging, dhl, instagram } from '@/lib/services';
 import { cfg } from '@/lib/config';
 import { FullscreenHeader } from '@/components/FullscreenHeader';
-import { StatusPill, PaymentPill } from '@/components/Pills';
+import { StatusPill, PaymentPill, SourcePill } from '@/components/Pills';
 import { Card } from '@/components/ui';
 import { ShipmentCard, StatusActions, PaymentCard, SatisfactionCard, NotificationsCard, Timeline, OrderActionsMenu } from '@/components/orders/detail';
 import { STATUSES, SHIPPING_PAYERS, ONLINE_SUBE_URL } from '@/lib/constants';
@@ -59,29 +59,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-5 px-3 py-4 sm:px-4 sm:py-6 md:px-6 lg:grid-cols-[minmax(0,1fr)_330px]">
         <div className="min-w-0 space-y-5">
-          <Card pad={false} title={<><StatusPill status={o.status} /><span className="hidden sm:inline">{STATUSES[o.status].label}</span> <span className="font-normal text-neutral-500">({count} ürün)</span></>} actions={<Link href={`/siparisler/${o.id}/duzenle`} className="btn btn-sm"><Pencil className="h-3.5 w-3.5" />Ürünleri düzenle</Link>}>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead><tr><th className="th">Ürün</th><th className="th w-14 text-right sm:w-20">Adet</th><th className="th w-24 text-right sm:w-28">Fiyat</th><th className="th w-24 text-right sm:w-32">Toplam</th></tr></thead>
-                <tbody>
-                  {o.lines.map((l, i) => (
-                    <tr key={i}>
-                      <td className="td"><div className="flex items-center gap-3"><div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-neutral-50 text-lg sm:flex">🎨</div><span className="font-medium">{l.name}</span></div></td>
-                      <td className="td text-right">{l.qty}</td>
-                      <td className="td text-right">{l.price != null ? money(l.price) : <span className="text-neutral-400">—</span>}</td>
-                      <td className="td text-right font-medium">{l.price != null ? money(l.qty * l.price) : <span className="text-neutral-400">—</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {o.labels && <div className="mx-4 my-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm sm:mx-5"><span className="font-medium">🏷 Etiket / kişiselleştirme notu:</span> {o.labels}</div>}
-          </Card>
-
-          <Card title={<><Truck className="h-4 w-4 text-neutral-500" />Kargo</>} actions={o.dhl_tracking_no ? <span className="rounded bg-[#ffcc00] px-1.5 py-0.5 text-[10px] font-bold text-[#d40511]">DHL</span> : <span className="text-xs text-neutral-500">Henüz kargoya verilmedi</span>}>
-            <ShipmentCard order={{ id: o.id, status: o.status, desi: o.desi, package_count: o.package_count, shipping_payer: o.shipping_payer, shipping_fee: o.shipping_fee, dhl_tracking_no: o.dhl_tracking_no, dhl_status_text: o.dhl_status_text, dhl_last_check: o.dhl_last_check, shipped_at: o.shipped_at, delivered_at: o.delivered_at, tracking_url: o.tracking_url }} copyBlock={copyBlock(o)} canCreate={dhl.canCreate()} canTrack={dhl.canTrack()} onlineSubeUrl={ONLINE_SUBE_URL} />
-          </Card>
-
           <Card title={<><User className="h-4 w-4 text-neutral-500" />Müşteri</>} actions={<><Link href={`/mesajlar/${c.id}`} className="btn btn-sm"><MessageCircle className="h-3.5 w-3.5" />Mesajlar</Link><Link href={`/musteriler/${c.id}`} className="btn btn-sm"><Pencil className="h-3.5 w-3.5" />Düzenle</Link></>}>
             <div className="grid gap-6 md:grid-cols-3">
               <div>
@@ -102,6 +79,29 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             </div>
           </Card>
 
+          <Card pad={false} title={<><StatusPill status={o.status} /><span className="hidden sm:inline">{STATUSES[o.status].label}</span> <span className="font-normal text-neutral-500">({count} ürün)</span></>} actions={<Link href={`/siparisler/${o.id}/duzenle`} className="btn btn-sm"><Pencil className="h-3.5 w-3.5" />Ürünleri düzenle</Link>}>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead><tr><th className="th">Ürün</th><th className="th w-14 text-right sm:w-20">Adet</th><th className="th w-24 text-right sm:w-28">Fiyat</th><th className="th w-24 text-right sm:w-32">Toplam</th></tr></thead>
+                <tbody>
+                  {o.lines.map((l, i) => (
+                    <tr key={i}>
+                      <td className="td"><div className="flex items-center gap-3"><div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-neutral-50 text-lg sm:flex">🎨</div><span className="font-medium">{l.name}</span>{l.variant && <span className="rounded-md border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-xs text-neutral-700">{l.variant}</span>}</div></td>
+                      <td className="td text-right">{l.qty}</td>
+                      <td className="td text-right">{l.price != null ? money(l.price) : <span className="text-neutral-400">—</span>}</td>
+                      <td className="td text-right font-medium">{l.price != null ? money(l.qty * l.price) : <span className="text-neutral-400">—</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {o.labels && <div className="mx-4 my-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm sm:mx-5"><span className="font-medium">🏷 Etiket / kişiselleştirme notu:</span> {o.labels}</div>}
+          </Card>
+
+          <Card title={<><Truck className="h-4 w-4 text-neutral-500" />Kargo</>} actions={o.dhl_tracking_no ? <span className="rounded bg-[#ffcc00] px-1.5 py-0.5 text-[10px] font-bold text-[#d40511]">DHL</span> : <span className="text-xs text-neutral-500">Henüz kargoya verilmedi</span>}>
+            <ShipmentCard order={{ id: o.id, status: o.status, desi: o.desi, package_count: o.package_count, shipping_payer: o.shipping_payer, shipping_fee: o.shipping_fee, dhl_tracking_no: o.dhl_tracking_no, dhl_status_text: o.dhl_status_text, dhl_last_check: o.dhl_last_check, shipped_at: o.shipped_at, delivered_at: o.delivered_at, tracking_url: o.tracking_url }} copyBlock={copyBlock(o)} canCreate={dhl.canCreate()} canTrack={dhl.canTrack()} onlineSubeUrl={ONLINE_SUBE_URL} />
+          </Card>
+
           <Card title="Zaman Çizelgesi">
             <Timeline id={o.id} events={o.events} author={cfg.business.ownerName || cfg.business.name} />
           </Card>
@@ -110,7 +110,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <aside className="min-w-0 space-y-5">
           <Card title="Sipariş Özeti">
             <p className="text-sm">{fmtDate(o.created_at)}</p>
-            <p className="mt-1 flex items-center gap-1.5 text-sm"><Instagram className="h-4 w-4 text-pink-600" />Instagram</p>
+            <p className="mt-1"><SourcePill source={o.source} /></p>
             <dl className="mt-4 space-y-2 border-t border-neutral-100 pt-3 text-sm">
               <div className="flex justify-between text-neutral-600"><dt>Ara Toplam</dt><dd>{money(o.subtotal)}</dd></div>
               <div className="flex justify-between text-neutral-600"><dt>{o.shipping_payer === 'alici' ? 'Kargo (alıcı öder)' : 'Kargo'}</dt><dd>{money(o.shipping_fee)}</dd></div>
