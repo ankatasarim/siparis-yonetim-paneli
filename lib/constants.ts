@@ -2,14 +2,14 @@ import type { OrderSource, OrderStatus, PaymentStatus, Satisfaction, ShippingPay
 
 export const STATUSES: Record<OrderStatus, { label: string; next: OrderStatus[]; pill: string; dot: string }> = {
   yeni:            { label: 'Yeni Sipariş',    next: ['hazirlaniyor', 'iptal'],    pill: 'border-blue-300 text-blue-700 bg-blue-50',        dot: 'bg-blue-500' },
-  hazirlaniyor:    { label: 'Hazırlanıyor',    next: ['kargoya_verildi', 'iptal'], pill: 'border-amber-300 text-amber-700 bg-amber-50',     dot: 'bg-amber-500' },
+  hazirlaniyor:    { label: 'Hazırlanıyor',    next: ['hazirlandi', 'kargoya_verildi', 'iptal'], pill: 'border-amber-300 text-amber-700 bg-amber-50',     dot: 'bg-amber-500' },
+  hazirlandi:      { label: 'Hazırlandı',      next: ['kargoya_verildi', 'iptal'], pill: 'border-cyan-300 text-cyan-700 bg-cyan-50',           dot: 'bg-cyan-500' },
   kargoya_verildi: { label: 'Kargoya Verildi', next: ['teslim_edildi', 'iptal'],   pill: 'border-violet-300 text-violet-700 bg-violet-50',  dot: 'bg-violet-500' },
-  teslim_edildi:   { label: 'Teslim Edildi',   next: ['kapandi'],                  pill: 'border-neutral-300 text-neutral-700 bg-white',    dot: 'bg-emerald-500' },
-  kapandi:         { label: 'Kapandı',         next: [],                           pill: 'border-neutral-200 text-neutral-500 bg-neutral-50', dot: 'bg-neutral-400' },
+  teslim_edildi:   { label: 'Teslim Edildi',   next: [],                           pill: 'border-neutral-300 text-neutral-700 bg-white',    dot: 'bg-emerald-500' },
   iptal:           { label: 'İptal',           next: [],                           pill: 'border-red-300 text-red-700 bg-red-50',           dot: 'bg-red-500' },
 };
 
-export const ACTIVE_STATUSES: OrderStatus[] = ['yeni', 'hazirlaniyor', 'kargoya_verildi', 'teslim_edildi'];
+export const ACTIVE_STATUSES: OrderStatus[] = ['yeni', 'hazirlaniyor', 'hazirlandi', 'kargoya_verildi'];
 export const ALL_STATUSES = Object.keys(STATUSES) as OrderStatus[];
 
 export const PAYMENT_STATUSES: Record<PaymentStatus, { label: string; pill: string }> = {

@@ -1,4 +1,5 @@
-export type OrderStatus = 'yeni' | 'hazirlaniyor' | 'kargoya_verildi' | 'teslim_edildi' | 'kapandi' | 'iptal';
+export type OrderStatus = 'yeni' | 'hazirlaniyor' | 'hazirlandi' | 'kargoya_verildi' | 'teslim_edildi' | 'iptal';
+export type ShippingCompany = 'dhl' | 'hepsijet';
 export type PaymentStatus = 'bekleniyor' | 'alindi' | 'kapida_odeme';
 export type ShippingPayer = 'gonderici' | 'alici';
 export type Satisfaction = 'bekleniyor' | 'memnun' | 'memnun_degil' | 'cevaplandi' | 'cevapsiz';
@@ -77,6 +78,8 @@ export interface Order {
   total: number;
   /** Sipariş kanalı (OrderSource); eski kayıtlarda serbest metin olabilir */
   source: string;
+  shipping_company: ShippingCompany | null;
+  shipping_tracking_no: string | null;
   dhl_tracking_no: string | null;
   dhl_shipment_ref: string | null;
   dhl_status: string | null;

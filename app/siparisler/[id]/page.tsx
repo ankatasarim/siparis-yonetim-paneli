@@ -39,7 +39,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const igOk = await instagram.isConfigured();
   const c = o.customer;
   const count = o.lines.reduce((s, l) => s + l.qty, 0);
-  const closed = o.status === 'kapandi' || o.status === 'iptal';
+  const closed = o.status === 'teslim_edildi' || o.status === 'iptal';
   const custName = c.name || (c.ig_username ? '@' + c.ig_username : 'İsimsiz müşteri');
   const navBtn = 'btn btn-dark hidden sm:inline-flex';
 
@@ -98,8 +98,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             {o.labels && <div className="mx-4 my-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm sm:mx-5"><span className="font-medium">🏷 Etiket / kişiselleştirme notu:</span> {o.labels}</div>}
           </Card>
 
-          <Card title={<><Truck className="h-4 w-4 text-neutral-500" />Kargo</>} actions={o.dhl_tracking_no ? <span className="rounded bg-[#ffcc00] px-1.5 py-0.5 text-[10px] font-bold text-[#d40511]">DHL</span> : <span className="text-xs text-neutral-500">Henüz kargoya verilmedi</span>}>
-            <ShipmentCard order={{ id: o.id, status: o.status, desi: o.desi, package_count: o.package_count, shipping_payer: o.shipping_payer, shipping_fee: o.shipping_fee, dhl_tracking_no: o.dhl_tracking_no, dhl_status_text: o.dhl_status_text, dhl_last_check: o.dhl_last_check, shipped_at: o.shipped_at, delivered_at: o.delivered_at, tracking_url: o.tracking_url }} copyBlock={copyBlock(o)} canCreate={dhl.canCreate()} canTrack={dhl.canTrack()} onlineSubeUrl={ONLINE_SUBE_URL} />
+          <Card title={<><Truck className="h-4 w-4 text-neutral-500" />Kargo</>} actions={o.shipping_company ? <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold uppercase">{o.shipping_company === 'dhl' ? 'DHL' : 'Hepsijet'}</span> : <span className="text-xs text-neutral-500">Henüz kargoya verilmedi</span>}>
+            <ShipmentCard order={{ id: o.id, status: o.status, desi: o.desi, package_count: o.package_count, shipping_payer: o.shipping_payer, shipping_fee: o.shipping_fee, shipping_company: o.shipping_company, shipping_tracking_no: o.shipping_tracking_no, dhl_tracking_no: o.dhl_tracking_no, dhl_status_text: o.dhl_status_text, dhl_last_check: o.dhl_last_check, shipped_at: o.shipped_at, delivered_at: o.delivered_at, tracking_url: o.tracking_url }} copyBlock={copyBlock(o)} canCreate={dhl.canCreate()} canTrack={dhl.canTrack()} onlineSubeUrl={ONLINE_SUBE_URL} />
           </Card>
 
           <Card title="Zaman Çizelgesi">
@@ -123,7 +123,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <Card title="Durum İşlemleri">
             <StatusActions id={o.id} status={o.status} next={o.next_statuses} />
           </Card>
-          {(o.status === 'teslim_edildi' || o.status === 'kapandi') && (
+          {o.status === 'teslim_edildi' && (
             <Card title="Memnuniyet">
               <SatisfactionCard id={o.id} status={o.status} satisfaction={o.satisfaction} note={o.satisfaction_note} askedAt={o.satisfaction_asked_at} preview={previews.memnuniyet} customerName={custName} igLinked={Boolean(c.ig_user_id)} igConfigured={igOk} />
             </Card>

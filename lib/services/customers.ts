@@ -100,6 +100,8 @@ export async function remove(id: number | string): Promise<boolean> {
   if (!c) throw httpError(404, 'Müşteri bulunamadı');
   const { count } = await db.store().select({ table: 'orders', columns: ['id'], where: [eq('customer_id', c.id)], limit: 1, count: true });
   if ((count || 0) > 0) throw httpError(400, 'Siparişi olan müşteri silinemez');
+  const { count: accountCount } = await db.store().select({ table: 'account_transactions', columns: ['id'], where: [eq('customer_id', c.id)], limit: 1, count: true });
+  if ((accountCount || 0) > 0) throw httpError(400, 'Cari hesap hareketi olan müşteri silinemez');
   await db.store().remove('messages', [eq('customer_id', c.id)]);
   await db.store().remove('customers', [eq('id', c.id)]);
   return true;

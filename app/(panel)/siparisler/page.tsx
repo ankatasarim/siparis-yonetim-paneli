@@ -56,10 +56,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               <div className="flex shrink-0 items-center gap-1"><CartPopup order={cart(o)} compact /><Link href={`/siparisler/${o.id}`} aria-label="Sipariş detayı"><ChevronRight className="h-4 w-4 text-neutral-400" /></Link></div>
             </div>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <StatusMenu id={o.id} orderNo={o.order_no} status={o.status} hasTracking={Boolean(o.dhl_tracking_no)} />
+              <StatusMenu id={o.id} orderNo={o.order_no} status={o.status} shippingCompany={o.shipping_company} trackingNo={o.shipping_tracking_no} />
               <PaymentPill status={o.payment_status} />
               <SourcePill source={o.source} className="!text-xs text-neutral-600" />
-              {o.dhl_tracking_no && <span className="font-mono text-[11px] text-neutral-500">📦 {o.dhl_tracking_no}</span>}
+              {o.shipping_tracking_no && <span className="font-mono text-[11px] text-neutral-500">📦 {o.shipping_tracking_no}</span>}
             </div>
           </div>
         ))}
@@ -95,13 +95,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                       <div className="text-xs text-neutral-500">{o.customer_email || o.customer_phone || (o.customer_ig ? '@' + o.customer_ig : '')}</div>
                     </td>
                     <td className="td">
-                      <StatusMenu id={o.id} orderNo={o.order_no} status={o.status} hasTracking={Boolean(o.dhl_tracking_no)} />
+                      <StatusMenu id={o.id} orderNo={o.order_no} status={o.status} shippingCompany={o.shipping_company} trackingNo={o.shipping_tracking_no} />
                       {o.satisfaction && o.status === 'teslim_edildi' && <div className="mt-1 text-xs text-neutral-500">{SATISFACTION_LABELS[o.satisfaction]}</div>}
                     </td>
                     <td className="td"><PaymentPill status={o.payment_status} /></td>
                     <td className="td whitespace-nowrap"><CartPopup order={cart(o)} /></td>
                     <td className="td whitespace-nowrap"><SourcePill source={o.source} /></td>
-                    <td className="td text-xs">{o.dhl_tracking_no ? <><div className="font-mono">{o.dhl_tracking_no}</div><div className="text-neutral-500">{o.dhl_status_text || ''}</div></> : <span className="text-neutral-400">—</span>}</td>
+                    <td className="td text-xs">{o.shipping_tracking_no ? <><div className="text-neutral-500">{o.shipping_company === 'dhl' ? 'DHL' : 'Hepsijet'}</div><div className="font-mono">{o.shipping_tracking_no}</div><div className="text-neutral-500">{o.shipping_company === 'dhl' ? o.dhl_status_text || '' : ''}</div></> : o.shipping_company ? <span className="text-neutral-500">{o.shipping_company === 'dhl' ? 'DHL' : 'Hepsijet'}</span> : <span className="text-neutral-400">—</span>}</td>
                     <td className="td text-xs text-neutral-600">{o.labels ? trunc(o.labels, 48) : <span className="text-neutral-400">—</span>}</td>
                   </RowLink>
                 );

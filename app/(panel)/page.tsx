@@ -17,7 +17,7 @@ function OrderList({ items, empty }: { items: OrderRow[]; empty: string }) {
           <Link href={`/siparisler/${o.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-neutral-50">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm"><span className="font-semibold">#{o.order_no}</span> · {o.customer_name || (o.customer_ig ? '@' + o.customer_ig : 'İsimsiz')}</p>
-              <p className="truncate text-xs text-neutral-500">{trunc(o.items, 70)}{o.dhl_tracking_no ? ` · 📦 ${o.dhl_tracking_no}` : ''}</p>
+              <p className="truncate text-xs text-neutral-500">{trunc(o.items, 70)}{o.shipping_tracking_no ? ` · 📦 ${o.shipping_tracking_no}` : ''}</p>
             </div>
             <div className="text-right">
               <p className="text-sm font-medium">{money(o.total)}</p>

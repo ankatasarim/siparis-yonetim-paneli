@@ -4,7 +4,7 @@ import { eq, gt, ilike, isIn, isNull, isUniqueViolation, lt, or, type Cond, type
 import { httpError, now, normalizeTr, pick, round2, toNumber } from '../utils';
 import { STATUSES, ACTIVE_STATUSES, PAYMENT_STATUSES, SHIPPING_PAYERS, SATISFACTION_LABELS, ORDER_SOURCES, DEFAULT_SOURCE, trackingUrl } from '../constants';
 import * as dhl from '../integrations/dhl';
-import type { Customer, Dashboard, Order, OrderEvent, OrderFull, OrderLine, OrderRow, OrderSource, OrderStatus, PaymentStatus, Satisfaction, Message } from '../types';
+import type { Customer, Dashboard, Order, OrderEvent, OrderFull, OrderLine, OrderRow, OrderSource, OrderStatus, PaymentStatus, Satisfaction, Message, ShippingCompany } from '../types';
 
 /* ---------- Kancalar ----------
  * Serverless ortamda (Vercel) yanıt döndükten sonra arka planda çalışan iş kesilir; bu yüzden
@@ -106,7 +106,12 @@ function hydrate<T extends Record<string, unknown>>(row: T | null): (Omit<T, 'li
   let lines: OrderLine[] = [];
   try { lines = JSON.parse((row.lines_json as string) || '[]'); } catch { lines = []; }
   const { lines_json: _lj, ...rest } = row;
-  return { ...rest, lines } as Omit<T, 'lines_json'> & { lines: OrderLine[] };
+  const normalized: Record<string, unknown> = { ...rest };
+  // Eski yerel yedeklerde de kapandı kayıtlarını teslim edildi olarak göster.
+  if (normalized.status === 'kapandi') normalized.status = 'teslim_edildi';
+  if (!normalized.shipping_company && normalized.dhl_tracking_no) normalized.shipping_company = 'dhl';
+  if (!normalized.shipping_tracking_no && normalized.dhl_tracking_no) normalized.shipping_tracking_no = normalized.dhl_tracking_no;
+  return { ...normalized, lines } as Omit<T, 'lines_json'> & { lines: OrderLine[] };
 }
 
 function safeJson(s: string | null): Record<string, unknown> | null {
@@ -150,7 +155,7 @@ export async function get(id: number | string): Promise<OrderFull | null> {
     events,
     messages,
     next_statuses: STATUSES[order.status] ? STATUSES[order.status].next : [],
-    tracking_url: order.dhl_tracking_no ? trackingUrl(order.dhl_tracking_no) : null,
+    tracking_url: order.shipping_company === 'dhl' && order.shipping_tracking_no ? trackingUrl(order.shipping_tracking_no) : null,
   };
 }
 
@@ -191,7 +196,7 @@ export async function list(opts: ListOpts = {}): Promise<{ rows: OrderRow[]; tot
   if (opts.q && String(opts.q).trim()) {
     const q = String(opts.q).trim().replace(/^#/, '');
     const like = `%${q}%`;
-    const conds: Cond[] = [ilike('items', like), ilike('dhl_tracking_no', like)];
+    const conds: Cond[] = [ilike('items', like), ilike('dhl_tracking_no', like), ilike('shipping_tracking_no', like)];
     if (/^\d+$/.test(q)) conds.push(eq('order_no', Number(q)));
     const { rows: cs } = await S().select<{ id: number }>({
       table: 'customers', columns: ['id'], where: [or(['name', 'phone', 'email', 'ig_username'].map((c) => ilike(c, like)))], limit: 500,
@@ -207,8 +212,11 @@ export async function list(opts: ListOpts = {}): Promise<{ rows: OrderRow[]; tot
 
 /** DHL toplu gönderi dosyası için siparişler + müşterileri (sipariş numarasına göre sıralı). */
 export async function listForDhlExport(opts: { statuses: OrderStatus[]; skipTracked: boolean }): Promise<{ order: Order; customer: Customer }[]> {
-  const where: Where[] = [isIn('status', opts.statuses)];
-  if (opts.skipTracked) where.push(or([isNull('dhl_tracking_no'), eq('dhl_tracking_no', '')]));
+  const where: Where[] = [isIn('status', opts.statuses), or([isNull('shipping_company'), eq('shipping_company', 'dhl')])];
+  if (opts.skipTracked) {
+    where.push(or([isNull('shipping_tracking_no'), eq('shipping_tracking_no', '')]));
+    where.push(or([isNull('dhl_tracking_no'), eq('dhl_tracking_no', '')]));
+  }
   const rows = await db.selectAll({ table: 'orders', where, order: [{ col: 'order_no' }] }, 500, 2000);
   const ids = [...new Set(rows.map((r) => Number(r.customer_id)))];
   const custs = ids.length ? await db.selectAll<Customer>({ table: 'customers', where: [isIn('id', ids)] }) : [];
@@ -299,17 +307,18 @@ export async function setStatus(id: number | string, status: OrderStatus, opts: 
   if (!opts.force && !from.next.includes(status)) {
     throw httpError(400, `"${from.label}" durumundan "${STATUSES[status].label}" durumuna geçilemez`);
   }
-  if (status === 'kargoya_verildi' && !order.dhl_tracking_no && !opts.force) {
-    throw httpError(400, 'Kargoya verildi olarak işaretlemek için önce DHL takip numarası girilmeli');
+  if (status === 'kargoya_verildi' && !order.shipping_company && !opts.force) {
+    throw httpError(400, 'Kargoya verildi olarak işaretlemek için kargo şirketi seçilmeli');
   }
   const t = now();
   const patch: Record<string, unknown> = { status, updated_at: t };
   if (status === 'kargoya_verildi') patch.shipped_at = t;
   if (status === 'teslim_edildi') {
     patch.delivered_at = t;
+    patch.closed_at = t;
     if (order.dhl_tracking_no && order.dhl_status !== 'delivered') { patch.dhl_status = 'delivered'; patch.dhl_status_text = 'Teslim edildi'; }
   }
-  if (status === 'kapandi' || status === 'iptal') patch.closed_at = t;
+  if (status === 'iptal') patch.closed_at = t;
   await S().update('orders', [eq('id', order.id)], patch);
   const by = opts.by || 'panel';
   await addEvent(order.id, 'durum', `${from.label} → ${STATUSES[status].label}${opts.note ? ' · ' + opts.note : ''}`, { from: order.status, to: status, by });
@@ -327,16 +336,30 @@ export async function setStatus(id: number | string, status: OrderStatus, opts: 
   return (await get(id))!;
 }
 
-/** DHL takip numarası kaydeder ve siparişi "Kargoya Verildi" durumuna alır. */
-export async function recordShipment(id: number | string, { tracking_no, shipment_ref, by }: { tracking_no?: string; shipment_ref?: string | null; by?: string }): Promise<OrderFull> {
+/** Kargo şirketini ve isteğe bağlı takip numarasını kaydeder, siparişi kargoya verildi yapar. */
+export async function recordShipment(id: number | string, { company, tracking_no, shipment_ref, by }: { company: ShippingCompany; tracking_no?: string; shipment_ref?: string | null; by?: string }): Promise<OrderFull> {
   const order = await getRaw(id);
   if (!order) throw httpError(404, 'Sipariş bulunamadı');
   const tracking = String(tracking_no || '').replace(/\s+/g, '').trim();
-  if (!tracking) throw httpError(400, 'DHL takip numarası gerekli');
-  if (['kapandi', 'iptal', 'teslim_edildi'].includes(order.status)) throw httpError(400, 'Bu sipariş için kargo kaydı yapılamaz');
+  if (!['dhl', 'hepsijet'].includes(company)) throw httpError(400, 'Geçersiz kargo şirketi');
+  if (['iptal', 'teslim_edildi'].includes(order.status)) throw httpError(400, 'Bu sipariş için kargo kaydı yapılamaz');
   if (order.status === 'yeni') await setStatus(id, 'hazirlaniyor', { by: by || 'panel', note: 'Kargo kaydı ile otomatik' });
-  await S().update('orders', [eq('id', order.id)], { dhl_tracking_no: tracking, dhl_shipment_ref: shipment_ref || null, dhl_status: 'created', dhl_status_text: 'Gönderi oluşturuldu', updated_at: now() });
-  await addEvent(order.id, 'kargo', `DHL gönderisi kaydedildi · Takip No: ${tracking}`, { tracking_no: tracking, shipment_ref: shipment_ref || null });
+  const patch: Record<string, unknown> = {
+    shipping_company: company,
+    shipping_tracking_no: tracking || null,
+    dhl_tracking_no: company === 'dhl' ? (tracking || null) : null,
+    dhl_shipment_ref: company === 'dhl' ? shipment_ref || null : null,
+    updated_at: now(),
+  };
+  if (company === 'dhl') {
+    patch.dhl_status = tracking ? 'created' : null;
+    patch.dhl_status_text = tracking ? 'Takip numarası kaydedildi' : null;
+  } else {
+    patch.dhl_status = null;
+    patch.dhl_status_text = null;
+  }
+  await S().update('orders', [eq('id', order.id)], patch);
+  await addEvent(order.id, 'kargo', `${company === 'dhl' ? 'DHL' : 'Hepsijet'} kargoya verildi${tracking ? ` · Takip No: ${tracking}` : ''}`, { company, tracking_no: tracking || null, shipment_ref: shipment_ref || null });
   if (order.status === 'kargoya_verildi') return (await get(id))!;
   return setStatus(id, 'kargoya_verildi', { by: by || 'panel' });
 }
@@ -392,9 +415,6 @@ export async function setSatisfaction(id: number | string, verdict: Satisfaction
   await S().update('orders', [eq('id', order.id)], { satisfaction: verdict, satisfaction_note: note || order.satisfaction_note || null, updated_at: now() });
   await addEvent(order.id, 'memnuniyet', `Memnuniyet: ${SATISFACTION_LABELS[verdict]}${note ? ' · "' + String(note).slice(0, 200) + '"' : ''}`, { verdict, by: opts.by || 'panel' });
   let updated = (await get(id))!;
-  if (verdict === 'memnun' && updated.status === 'teslim_edildi' && opts.autoClose !== false) {
-    updated = await setStatus(id, 'kapandi', { by: opts.by || 'panel', note: 'Müşteri memnun' });
-  }
   await fire('satisfaction', { order: updated, verdict, note });
   return updated;
 }
@@ -423,7 +443,7 @@ export async function dashboard(): Promise<Dashboard> {
     if (o.created_at >= today) today_count += 1;
     if (o.created_at >= month && o.status !== 'iptal') { month_count += 1; month_revenue += Number(o.total) || 0; }
     if (o.status === 'teslim_edildi' && (o.satisfaction === 'memnun_degil' || o.satisfaction === 'cevaplandi')) unhappy += 1;
-    if (o.payment_status === 'bekleniyor' && o.status !== 'iptal' && o.status !== 'kapandi') unpaid += 1;
+    if (o.payment_status === 'bekleniyor' && o.status !== 'iptal' && o.status !== 'teslim_edildi') unpaid += 1;
   }
   const pending_messages = (await S().select({ table: 'messages', columns: ['id'], where: [eq('direction', 'out'), isIn('status', ['failed', 'pending'])], limit: 1, count: true })).count || 0;
   const unread = (await S().select({ table: 'messages', columns: ['id'], where: [eq('direction', 'in'), eq('is_read', 0)], limit: 1, count: true })).count || 0;
@@ -433,10 +453,10 @@ export async function dashboard(): Promise<Dashboard> {
   const recent_events = evs.map((e) => ({ ...e, meta: safeJson(e.meta as unknown as string), order_no: noMap.get(e.order_id) || 0 }));
   return {
     counts,
-    attention: { pending_messages, unhappy, unread, no_tracking: counts.hazirlaniyor, unpaid },
+    attention: { pending_messages, unhappy, unread, no_tracking: counts.hazirlaniyor + counts.hazirlandi, unpaid },
     recent_events, today_count, month_count, month_revenue: round2(month_revenue),
     new_orders: (await list({ status: 'yeni', pageSize: 8 })).rows,
-    awaiting_shipment: (await list({ status: 'hazirlaniyor', pageSize: 8 })).rows,
+    awaiting_shipment: (await list({ statuses: ['hazirlaniyor', 'hazirlandi'], pageSize: 8 })).rows,
     in_transit: (await list({ status: 'kargoya_verildi', pageSize: 8 })).rows,
   };
 }

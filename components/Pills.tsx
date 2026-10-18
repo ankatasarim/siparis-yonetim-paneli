@@ -8,7 +8,7 @@ const SOURCE_ICONS: Record<OrderSource, { icon: LucideIcon; color: string }> = {
   shopier: { icon: ShoppingBag, color: 'text-blue-600' },
 };
 
-const STATUS_ICONS: Record<OrderStatus, LucideIcon> = { yeni: Sparkles, hazirlaniyor: Clock, kargoya_verildi: Truck, teslim_edildi: Check, kapandi: Lock, iptal: XCircle };
+const STATUS_ICONS: Record<OrderStatus, LucideIcon> = { yeni: Sparkles, hazirlaniyor: Clock, hazirlandi: Check, kargoya_verildi: Truck, teslim_edildi: Check, iptal: XCircle };
 const PAY_ICONS: Record<PaymentStatus, LucideIcon> = { alindi: Check, bekleniyor: Hourglass, kapida_odeme: HandCoins };
 
 const base = 'inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium';

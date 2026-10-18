@@ -8,7 +8,7 @@ import type { OrderStatus } from '@/lib/types';
 
 /**
  * DHL toplu gönderi Excel'i.
- *  ?durum=yeni,hazirlaniyor  hangi durumlar (varsayılan: yeni + hazırlanıyor)
+ *  ?durum=yeni,hazirlaniyor,hazirlandi  hangi durumlar (varsayılan: yeni + hazırlanıyor + hazırlandı)
  *  ?atla=1                   takip numarası girilmiş siparişleri dışarıda bırak (varsayılan: 1)
  *  ?onizle=1                 dosya yerine özet JSON döndür (sayı + eksik bilgili siparişler)
  *  ?bicim=xls|xlsx           dosya biçimi (varsayılan xls, DHL şablonu gibi)
@@ -16,10 +16,10 @@ import type { OrderStatus } from '@/lib/types';
  */
 export const GET = api(async (req) => {
   const sp = req.nextUrl.searchParams;
-  const statuses = (sp.get('durum') || 'yeni,hazirlaniyor').split(',').map((s) => s.trim()).filter((s) => STATUSES[s as OrderStatus]) as OrderStatus[];
+  const statuses = (sp.get('durum') || 'yeni,hazirlaniyor,hazirlandi').split(',').map((s) => s.trim()).filter((s) => STATUSES[s as OrderStatus]) as OrderStatus[];
   const skipTracked = sp.get('atla') !== '0';
   const format: FileFormat = sp.get('bicim') === 'xlsx' ? 'xlsx' : 'xls';
-  const items = await orders.listForDhlExport({ statuses: statuses.length ? statuses : ['yeni', 'hazirlaniyor'], skipTracked });
+  const items = await orders.listForDhlExport({ statuses: statuses.length ? statuses : ['yeni', 'hazirlaniyor', 'hazirlandi'], skipTracked });
   const problems = items.map(checkItem).filter((p): p is NonNullable<typeof p> => p !== null);
   const blocked = new Set(problems.filter((p) => p.missing.length).map((p) => p.id));
   const ready = items.filter((x) => !blocked.has(x.order.id));

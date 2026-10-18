@@ -45,7 +45,7 @@ export async function pollShipments(opts: { limit?: number; budgetMs?: number } 
   return { checked, total: rows.length };
 }
 
-/** Memnuniyet sorusuna X gün cevap gelmeyen siparişleri kapatır. */
+/** Memnuniyet sorusuna X gün cevap gelmeyen siparişleri cevapsız olarak işaretler. */
 export async function closeStaleSatisfaction(): Promise<number> {
   const days = cfg.automation.satisfactionAutoCloseDays;
   const cutoff = new Date(Date.now() - days * 86400000).toISOString();
@@ -55,12 +55,11 @@ export async function closeStaleSatisfaction(): Promise<number> {
   for (const r of rows) {
     try {
       await orders.setSatisfaction(r.id, 'cevapsiz', null, { by: 'otomatik', autoClose: false });
-      await orders.setStatus(r.id, 'kapandi', { by: 'otomatik', note: `Memnuniyet cevabı gelmedi (${days} gün)` });
     } catch (e) {
-      console.error('[otomasyon] otomatik kapatma hatası:', (e as Error).message);
+      console.error('[otomasyon] memnuniyet durumu güncellenemedi:', (e as Error).message);
     }
   }
-  if (rows.length) log(`${rows.length} sipariş cevapsız olarak kapatıldı`);
+  if (rows.length) log(`${rows.length} sipariş cevapsız olarak işaretlendi`);
   return rows.length;
 }
 

@@ -2,13 +2,15 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Home, Package, Tag, Users, Inbox, Settings, PanelLeftClose, PanelLeftOpen, Instagram, Globe, LogOut, Plus, Feather } from 'lucide-react';
+import { Home, Package, Tag, Users, Inbox, Settings, PanelLeftClose, PanelLeftOpen, Instagram, Globe, LogOut, Plus, Feather, Wallet, BookUser } from 'lucide-react';
 import { api } from '@/lib/client';
 import { money, initials } from '@/lib/format';
 
 const NAV = [
   { href: '/', label: 'Giriş', icon: Home },
   { href: '/siparisler', label: 'Siparişler', icon: Package },
+  { href: '/gelir-gider', label: 'Gelir / Gider', icon: Wallet },
+  { href: '/cariler', label: 'Cari Hesaplar', icon: BookUser },
   { href: '/urunler', label: 'Ürünler', icon: Tag },
   { href: '/musteriler', label: 'Müşteriler', icon: Users },
   { href: '/mesajlar', label: 'Gelen Kutusu', icon: Inbox, badge: true },

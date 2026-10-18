@@ -10,7 +10,7 @@ import { Field } from '@/components/ui';
 import { MsgStatusPill, PaymentPill } from '@/components/Pills';
 import { STATUSES, SHIPPING_PAYERS, SATISFACTION_LABELS, PAYMENT_STATUSES, PAYMENT_METHODS, MESSAGE_KIND_LABELS } from '@/lib/constants';
 import { fmtDate, money } from '@/lib/format';
-import type { Message, OrderEvent, OrderStatus, PaymentStatus, Satisfaction, ShippingPayer } from '@/lib/types';
+import type { Message, OrderEvent, OrderStatus, PaymentStatus, Satisfaction, ShippingCompany, ShippingPayer } from '@/lib/types';
 
 function useAction() {
   const router = useRouter();
@@ -27,7 +27,7 @@ function useAction() {
 
 /* ---------------- Kargo ---------------- */
 export function ShipmentCard({ order, copyBlock, canCreate, canTrack, onlineSubeUrl }: {
-  order: { id: number; status: OrderStatus; desi: number | null; package_count: number; shipping_payer: ShippingPayer; shipping_fee: number; dhl_tracking_no: string | null; dhl_status_text: string | null; dhl_last_check: string | null; shipped_at: string | null; delivered_at: string | null; tracking_url: string | null };
+  order: { id: number; status: OrderStatus; desi: number | null; package_count: number; shipping_payer: ShippingPayer; shipping_fee: number; shipping_company: ShippingCompany | null; shipping_tracking_no: string | null; dhl_tracking_no: string | null; dhl_status_text: string | null; dhl_last_check: string | null; shipped_at: string | null; delivered_at: string | null; tracking_url: string | null };
   copyBlock: string; canCreate: boolean; canTrack: boolean; onlineSubeUrl: string;
 }) {
   const { run, busy, toast } = useAction();
@@ -37,9 +37,10 @@ export function ShipmentCard({ order, copyBlock, canCreate, canTrack, onlineSube
   const [fee, setFee] = useState(String(order.shipping_fee || 0));
   const [dims, setDims] = useState({ w: '', l: '', h: '' });
   const [trackingNo, setTrackingNo] = useState('');
+  const [company, setCompany] = useState<ShippingCompany>(order.shipping_company || 'dhl');
   const [confirmApi, setConfirmApi] = useState(false);
-  const closed = order.status === 'kapandi' || order.status === 'iptal';
-  const preShip = order.status === 'yeni' || order.status === 'hazirlaniyor';
+  const closed = order.status === 'teslim_edildi' || order.status === 'iptal';
+  const preShip = order.status === 'yeni' || order.status === 'hazirlaniyor' || order.status === 'hazirlandi';
   const fields = () => ({ desi, package_count: pkg, shipping_payer: payer, shipping_fee: fee });
 
   const calc = () => {
@@ -76,33 +77,34 @@ export function ShipmentCard({ order, copyBlock, canCreate, canTrack, onlineSube
 
       {preShip && (
         <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50 p-4">
-          <p className="mb-2 text-xs text-neutral-600">{canCreate ? 'DHL API bağlı: gönderiyi doğrudan buradan oluşturabilirsiniz.' : 'Aşağıdaki bilgileri DHL Online Şube\'ye girin, aldığınız takip numarasını kaydedin. Kayıttan sonra kargo mesajını Bildirimler kartından tek tıkla gönderebilirsiniz.'}</p>
+          <p className="mb-2 text-xs text-neutral-600">Kargo şirketini seçip takip numarasını isteğe bağlı girebilirsiniz. Kayıttan sonra sipariş kargoya verildi durumuna alınır.</p>
           <pre className="whitespace-pre-wrap rounded-md border border-neutral-200 bg-white p-3 font-mono text-xs leading-relaxed">{copyBlock}</pre>
           <div className="mt-3 flex flex-wrap gap-2">
             <button onClick={async () => { if (await copyText(copyBlock)) toast('Kopyalandı', 'ok'); }} className="btn btn-sm"><Copy className="h-3.5 w-3.5" />Kopyala</button>
-            <a href={onlineSubeUrl} target="_blank" rel="noopener" className="btn btn-sm"><ExternalLink className="h-3.5 w-3.5" />DHL Online Şube</a>
+            {company === 'dhl' && <a href={onlineSubeUrl} target="_blank" rel="noopener" className="btn btn-sm"><ExternalLink className="h-3.5 w-3.5" />DHL Online Şube</a>}
             {canCreate && <button disabled={busy} onClick={() => setConfirmApi(true)} className="btn btn-sm btn-dark"><Truck className="h-3.5 w-3.5" />DHL API ile gönderi oluştur</button>}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <input value={trackingNo} onChange={(e) => setTrackingNo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (document.getElementById('ship-save') as HTMLButtonElement)?.click(); }} placeholder="DHL takip numarası" className="input max-w-xs" />
-            <button id="ship-save" disabled={busy} onClick={() => { if (!trackingNo.trim()) return toast('Takip numarası girin', 'err'); run(() => api.post(`/api/orders/${order.id}/shipment`, { ...fields(), tracking_no: trackingNo.trim() }), 'Kargo kaydedildi'); }} className="btn btn-sm btn-primary">Kargoya verildi olarak kaydet</button>
+            <select value={company} onChange={(e) => setCompany(e.target.value as ShippingCompany)} className="input max-w-[170px]"><option value="dhl">DHL</option><option value="hepsijet">Hepsijet</option></select>
+            <input value={trackingNo} onChange={(e) => setTrackingNo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (document.getElementById('ship-save') as HTMLButtonElement)?.click(); }} placeholder="Takip numarası (isteğe bağlı)" className="input max-w-xs" />
+            <button id="ship-save" disabled={busy} onClick={() => run(() => api.post(`/api/orders/${order.id}/shipment`, { ...fields(), company, tracking_no: trackingNo.trim() }), 'Kargoya verildi olarak kaydedildi')} className="btn btn-sm btn-primary">Kargoya verildi olarak kaydet</button>
           </div>
-          <ConfirmDialog open={confirmApi} text="DHL API üzerinden gönderi oluşturulsun mu? Alıcı bilgileri ve desi DHL'ye iletilecek." okLabel="Oluştur" busy={busy} onCancel={() => setConfirmApi(false)} onConfirm={async () => { const ok = await run(() => api.post(`/api/orders/${order.id}/shipment`, fields()), 'DHL gönderisi oluşturuldu'); if (ok) setConfirmApi(false); }} />
+          <ConfirmDialog open={confirmApi} text="DHL API üzerinden gönderi oluşturulsun mu? Alıcı bilgileri ve desi DHL'ye iletilecek." okLabel="Oluştur" busy={busy} onCancel={() => setConfirmApi(false)} onConfirm={async () => { const ok = await run(() => api.post(`/api/orders/${order.id}/shipment`, { ...fields(), create_dhl: true }), 'DHL gönderisi oluşturuldu'); if (ok) setConfirmApi(false); }} />
         </div>
       )}
 
-      {order.dhl_tracking_no && (
+      {order.shipping_company && (
         <div className="space-y-3">
           <dl className="kv">
-            <dt>Kargo Şirketi</dt><dd className="flex items-center gap-2"><span className="rounded bg-[#ffcc00] px-1.5 py-0.5 text-[10px] font-bold text-[#d40511]">DHL</span>DHL eCommerce</dd>
-            <dt>Takip No</dt><dd className="flex flex-wrap items-center gap-2"><span className="font-mono">{order.dhl_tracking_no}</span>{order.tracking_url && <a href={order.tracking_url} target="_blank" rel="noopener" className="text-primary-text hover:underline">takip <ExternalLink className="inline h-3 w-3" /></a>}<button onClick={async () => { if (await copyText(order.dhl_tracking_no!)) toast('Kopyalandı', 'ok'); }} className="btn btn-xs">kopyala</button></dd>
-            <dt>DHL durumu</dt><dd>{order.dhl_status_text || '—'}{order.dhl_last_check && <span className="ml-2 text-xs text-neutral-500">son kontrol {fmtDate(order.dhl_last_check)}</span>}</dd>
+            <dt>Kargo Şirketi</dt><dd>{order.shipping_company === 'dhl' ? 'DHL' : 'Hepsijet'}</dd>
+            {order.shipping_tracking_no && <><dt>Takip No</dt><dd className="flex flex-wrap items-center gap-2"><span className="font-mono">{order.shipping_tracking_no}</span>{order.tracking_url && <a href={order.tracking_url} target="_blank" rel="noopener" className="text-primary-text hover:underline">takip <ExternalLink className="inline h-3 w-3" /></a>}<button onClick={async () => { if (await copyText(order.shipping_tracking_no!)) toast('Kopyalandı', 'ok'); }} className="btn btn-xs">kopyala</button></dd></>}
+            {order.shipping_company === 'dhl' && <><dt>DHL durumu</dt><dd>{order.dhl_status_text || '—'}{order.dhl_last_check && <span className="ml-2 text-xs text-neutral-500">son kontrol {fmtDate(order.dhl_last_check)}</span>}</dd></>}
             {order.shipped_at && <><dt>Kargo tarihi</dt><dd>{fmtDate(order.shipped_at)}</dd></>}
             {order.delivered_at && <><dt>Teslim</dt><dd>{fmtDate(order.delivered_at)}</dd></>}
           </dl>
           {order.status === 'kargoya_verildi' && (
             <div className="flex flex-wrap gap-2">
-              {canTrack && <button disabled={busy} onClick={() => run(async () => { const r = await api.post(`/api/orders/${order.id}/track`); toast(r.tracked ? 'DHL: ' + (r.result ? r.result.text : '—') : r.message); })} className="btn btn-sm"><RefreshCw className="h-3.5 w-3.5" />Durumu sorgula</button>}
+              {order.shipping_company === 'dhl' && order.dhl_tracking_no && canTrack && <button disabled={busy} onClick={() => run(async () => { const r = await api.post(`/api/orders/${order.id}/track`); toast(r.tracked ? 'DHL: ' + (r.result ? r.result.text : '—') : r.message); })} className="btn btn-sm"><RefreshCw className="h-3.5 w-3.5" />Durumu sorgula</button>}
               <button disabled={busy} onClick={() => run(() => api.post(`/api/orders/${order.id}/status`, { status: 'teslim_edildi' }), 'Teslim edildi olarak işaretlendi')} className="btn btn-sm btn-primary"><Check className="h-3.5 w-3.5" />Teslim edildi olarak işaretle</button>
             </div>
           )}
@@ -118,8 +120,8 @@ export function StatusActions({ id, status, next }: { id: number; status: OrderS
   const [confirmCancel, setConfirmCancel] = useState(false);
   const labels: Partial<Record<OrderStatus, { label: string; icon: ReactNode; cls: string }>> = {
     hazirlaniyor: { label: 'Hazırlığa al', icon: <Clock className="h-3.5 w-3.5" />, cls: 'btn-primary' },
+    hazirlandi: { label: 'Hazırlandı', icon: <Check className="h-3.5 w-3.5" />, cls: 'btn-primary' },
     teslim_edildi: { label: 'Teslim edildi', icon: <Check className="h-3.5 w-3.5" />, cls: 'btn-primary' },
-    kapandi: { label: 'Siparişi kapat', icon: <Lock className="h-3.5 w-3.5" />, cls: '' },
     iptal: { label: 'İptal et', icon: <XCircle className="h-3.5 w-3.5" />, cls: 'btn-danger' },
   };
   const items = next.filter((s) => s !== 'kargoya_verildi');
@@ -130,7 +132,7 @@ export function StatusActions({ id, status, next }: { id: number; status: OrderS
         const l = labels[s]!;
         return <button key={s} disabled={busy} onClick={() => (s === 'iptal' ? setConfirmCancel(true) : run(() => api.post(`/api/orders/${id}/status`, { status: s }), 'Durum güncellendi'))} className={`btn btn-sm ${l.cls}`}>{l.icon}{l.label}</button>;
       })}
-      {status === 'hazirlaniyor' && <p className="w-full text-xs text-neutral-500">Kargoya vermek için yukarıdaki kargo kartından takip numarasını kaydedin.</p>}
+      {(status === 'hazirlaniyor' || status === 'hazirlandi') && <p className="w-full text-xs text-neutral-500">Kargoya verirken kargo şirketini seçin; takip numarası isteğe bağlıdır.</p>}
       <ConfirmDialog open={confirmCancel} text="Sipariş iptal edilsin mi? Bu işlem geri alınamaz." okLabel="İptal et" danger busy={busy} onCancel={() => setConfirmCancel(false)} onConfirm={async () => { const ok = await run(() => api.post(`/api/orders/${id}/status`, { status: 'iptal' }), 'Sipariş iptal edildi'); if (ok) setConfirmCancel(false); }} />
     </div>
   );

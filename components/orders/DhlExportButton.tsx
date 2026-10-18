@@ -10,12 +10,12 @@ import { STATUSES, ONLINE_SUBE_URL } from '@/lib/constants';
 import type { OrderStatus } from '@/lib/types';
 
 interface Preview { total: number; ready: number; problems: { id: number; order_no: number; name: string; missing: string[]; warnings: string[] }[] }
-const PICKABLE: OrderStatus[] = ['yeni', 'hazirlaniyor', 'kargoya_verildi'];
+const PICKABLE: OrderStatus[] = ['yeni', 'hazirlaniyor', 'hazirlandi', 'kargoya_verildi'];
 
 export function DhlExportButton() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [statuses, setStatuses] = useState<OrderStatus[]>(['yeni', 'hazirlaniyor']);
+  const [statuses, setStatuses] = useState<OrderStatus[]>(['yeni', 'hazirlaniyor', 'hazirlandi']);
   const [skipTracked, setSkipTracked] = useState(true);
   const [format, setFormat] = useState<'xls' | 'xlsx'>('xls');
   const [preview, setPreview] = useState<Preview | null>(null);

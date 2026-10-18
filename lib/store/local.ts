@@ -7,27 +7,29 @@ import { StoreError, type Cond, type Query, type Row, type Store, type Table, ty
  * Supabase deposuyla aynı filtre/sıralama anlamını taşır; yerel geliştirme ve testler için.
  */
 
-const TABLES: Table[] = ['customers', 'products', 'orders', 'messages', 'order_events', 'settings'];
+const TABLES: Table[] = ['customers', 'products', 'orders', 'messages', 'order_events', 'finance_transactions', 'account_transactions', 'settings'];
 const UNIQUE: Partial<Record<Table, string[]>> = { customers: ['ig_user_id'], orders: ['order_no'], messages: ['ig_mid'], settings: ['key'] };
-const HAS_ID = new Set<Table>(['customers', 'products', 'orders', 'messages', 'order_events']);
+const HAS_ID = new Set<Table>(['customers', 'products', 'orders', 'messages', 'order_events', 'finance_transactions', 'account_transactions']);
 /** Veritabanındaki sütun varsayılanları: eksik alanlar undefined yerine bu değerlerle doldurulur. */
 const DEFAULTS: Record<Table, Row> = {
   customers: { ig_user_id: null, ig_username: null, name: '', email: '', phone: '', address: '', city: '', district: '', postal_code: '', notes: '', profile_pic: null },
   products: { price: null, description: '', image: '', desi: 0, options_json: '[]', active: 1, sort_order: 0 },
   orders: {
     status: 'yeni', payment_status: 'bekleniyor', payment_method: '', shipping_payer: 'gonderici', lines_json: '[]', items: '', notes: '', labels: '', desi: null,
-    package_count: 1, shipping_fee: 0, subtotal: 0, total: 0, source: 'instagram', dhl_tracking_no: null, dhl_shipment_ref: null, dhl_status: null, dhl_status_text: null,
+    package_count: 1, shipping_fee: 0, subtotal: 0, total: 0, source: 'instagram', shipping_company: null, shipping_tracking_no: null, dhl_tracking_no: null, dhl_shipment_ref: null, dhl_status: null, dhl_status_text: null,
     dhl_last_check: null, shipped_at: null, delivered_at: null, closed_at: null, satisfaction: null, satisfaction_note: null, satisfaction_asked_at: null,
   },
   messages: { order_id: null, channel: 'instagram', ig_mid: null, text: '', attachments: '[]', status: 'ok', error: null, kind: null, is_read: 0 },
   order_events: { description: '', meta: null },
+  finance_transactions: { type: 'expense', category: '', description: '', amount: 0, date: '', notes: '' },
+  account_transactions: { type: 'charge', description: '', amount: 0, date: '', notes: '' },
   settings: { value: null },
 };
 
 type Data = Record<Table, Row[]>;
 
 function emptyData(): Data {
-  return { customers: [], products: [], orders: [], messages: [], order_events: [], settings: [] };
+  return { customers: [], products: [], orders: [], messages: [], order_events: [], finance_transactions: [], account_transactions: [], settings: [] };
 }
 
 function likeToRegex(pattern: string): RegExp {
