@@ -9,3 +9,4 @@ data/
 next-env.d.ts
 .vercel
 .next-verify
+supabase/
