@@ -7,7 +7,7 @@ import { FullscreenHeader } from '@/components/FullscreenHeader';
 import { StatusPill, PaymentPill, SourcePill } from '@/components/Pills';
 import { Card } from '@/components/ui';
 import { ShipmentCard, StatusActions, PaymentCard, SatisfactionCard, NotificationsCard, Timeline, OrderActionsMenu } from '@/components/orders/detail';
-import { STATUSES, SHIPPING_PAYERS, ONLINE_SUBE_URL } from '@/lib/constants';
+import { STATUSES, SHIPPING_PAYERS, SHIPPING_COMPANIES, ONLINE_SUBE_URL } from '@/lib/constants';
 import { money, fmtDate } from '@/lib/format';
 import type { OrderFull } from '@/lib/types';
 
@@ -48,7 +48,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       <FullscreenHeader
         back="/siparisler"
         crumbs={[{ label: 'Siparişler', href: '/siparisler' }, { label: `Sipariş #${o.order_no}` }]}
-        pills={<><StatusPill status={o.status} className="!border-neutral-600 !bg-transparent !text-white" /><PaymentPill status={o.payment_status} className="!bg-transparent" /></>}
+        pills={<><StatusPill status={o.status} className="!border-neutral-600 !bg-transparent !text-white" /><PaymentPill status={o.payment_status} method={o.payment_method} className="!bg-transparent" /></>}
         right={<>
           {nb.prev ? <Link href={`/siparisler/${nb.prev}`} className={navBtn}><ArrowLeft className="h-4 w-4" />Önceki</Link> : <span className={`${navBtn} opacity-40`}><ArrowLeft className="h-4 w-4" />Önceki</span>}
           {nb.next ? <Link href={`/siparisler/${nb.next}`} className={navBtn}>Sonraki<ArrowRight className="h-4 w-4" /></Link> : <span className={`${navBtn} opacity-40`}>Sonraki<ArrowRight className="h-4 w-4" /></span>}
@@ -98,7 +98,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             {o.labels && <div className="mx-4 my-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm sm:mx-5"><span className="font-medium">🏷 Etiket / kişiselleştirme notu:</span> {o.labels}</div>}
           </Card>
 
-          <Card title={<><Truck className="h-4 w-4 text-neutral-500" />Kargo</>} actions={o.shipping_company ? <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold uppercase">{o.shipping_company === 'dhl' ? 'DHL' : 'Hepsijet'}</span> : <span className="text-xs text-neutral-500">Henüz kargoya verilmedi</span>}>
+          <Card title={<><Truck className="h-4 w-4 text-neutral-500" />Kargo / Teslimat</>} actions={o.shipping_company ? <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold">{SHIPPING_COMPANIES[o.shipping_company]}</span> : <span className="text-xs text-neutral-500">Henüz kargoya verilmedi</span>}>
             <ShipmentCard order={{ id: o.id, status: o.status, desi: o.desi, package_count: o.package_count, shipping_payer: o.shipping_payer, shipping_fee: o.shipping_fee, shipping_company: o.shipping_company, shipping_tracking_no: o.shipping_tracking_no, dhl_tracking_no: o.dhl_tracking_no, dhl_status_text: o.dhl_status_text, dhl_last_check: o.dhl_last_check, shipped_at: o.shipped_at, delivered_at: o.delivered_at, tracking_url: o.tracking_url }} copyBlock={copyBlock(o)} canCreate={dhl.canCreate()} canTrack={dhl.canTrack()} onlineSubeUrl={ONLINE_SUBE_URL} />
           </Card>
 

@@ -8,7 +8,7 @@ import { useToast } from '@/components/Toast';
 import { Card, Field, Avatar } from '@/components/ui';
 import { Spinner } from '@/components/Loading';
 import { UnsavedGuard } from '@/components/UnsavedGuard';
-import { PAYMENT_STATUSES, SHIPPING_PAYERS, PAYMENT_METHODS, ORDER_SOURCES, DEFAULT_SOURCE } from '@/lib/constants';
+import { PAYMENT_STATUSES, SHIPPING_PAYERS, PAYMENT_METHODS, ACCOUNT_PAYMENT_METHOD, ORDER_SOURCES, DEFAULT_SOURCE } from '@/lib/constants';
 import { money } from '@/lib/format';
 import type { Customer, CustomerRow, OrderFull, OrderLine, OrderSource, PaymentStatus, Product, ShippingPayer } from '@/lib/types';
 
@@ -250,8 +250,9 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
           </Card>
           <Card title="Ödeme">
             <div className="space-y-3">
-              <Field label="Ödeme durumu"><select value={f.payment_status} onChange={(e) => setF({ ...f, payment_status: e.target.value as PaymentStatus })} className="input">{(Object.keys(PAYMENT_STATUSES) as PaymentStatus[]).map((k) => <option key={k} value={k}>{PAYMENT_STATUSES[k].label}</option>)}</select></Field>
-              <Field label="Ödeme yöntemi"><input list="pm" value={f.payment_method} onChange={(e) => setF({ ...f, payment_method: e.target.value })} className="input" placeholder="Havale / EFT" /><datalist id="pm">{PAYMENT_METHODS.map((m) => <option key={m} value={m} />)}</datalist></Field>
+              <Field label="Ödeme durumu"><select disabled={f.payment_method === ACCOUNT_PAYMENT_METHOD} value={f.payment_status} onChange={(e) => setF({ ...f, payment_status: e.target.value as PaymentStatus })} className="input disabled:cursor-not-allowed disabled:bg-neutral-100">{(Object.keys(PAYMENT_STATUSES) as PaymentStatus[]).map((k) => <option key={k} value={k}>{PAYMENT_STATUSES[k].label}</option>)}</select></Field>
+              <Field label="Ödeme yöntemi"><input list="pm" value={f.payment_method} onChange={(e) => setF({ ...f, payment_method: e.target.value, ...(e.target.value === ACCOUNT_PAYMENT_METHOD ? { payment_status: 'bekleniyor' as PaymentStatus } : {}) })} className="input" placeholder="Havale / EFT veya Cari Hesap" /><datalist id="pm">{PAYMENT_METHODS.map((m) => <option key={m} value={m} />)}<option value={ACCOUNT_PAYMENT_METHOD} /></datalist></Field>
+              {f.payment_method === ACCOUNT_PAYMENT_METHOD && <p className="-mt-1 rounded-md bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800 md:col-span-2">Sipariş toplamı müşterinin cari hesabına borç yazılır ve “Cari Hesapta” olarak görünür. Tahsilat geldiğinde Cari Hesaplar ekranından kaydedin. Böylece gelir yalnızca tahsil edildiği tarihte raporlanır.</p>}
             </div>
           </Card>
           <Card title="Kargo">

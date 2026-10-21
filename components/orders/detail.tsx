@@ -8,7 +8,7 @@ import { useToast } from '@/components/Toast';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { Field } from '@/components/ui';
 import { MsgStatusPill, PaymentPill } from '@/components/Pills';
-import { STATUSES, SHIPPING_PAYERS, SATISFACTION_LABELS, PAYMENT_STATUSES, PAYMENT_METHODS, MESSAGE_KIND_LABELS } from '@/lib/constants';
+import { STATUSES, SHIPPING_PAYERS, SHIPPING_COMPANIES, SATISFACTION_LABELS, PAYMENT_STATUSES, PAYMENT_METHODS, ACCOUNT_PAYMENT_METHOD, MESSAGE_KIND_LABELS } from '@/lib/constants';
 import { fmtDate, money } from '@/lib/format';
 import type { Message, OrderEvent, OrderStatus, PaymentStatus, Satisfaction, ShippingCompany, ShippingPayer } from '@/lib/types';
 
@@ -85,9 +85,9 @@ export function ShipmentCard({ order, copyBlock, canCreate, canTrack, onlineSube
             {canCreate && <button disabled={busy} onClick={() => setConfirmApi(true)} className="btn btn-sm btn-dark"><Truck className="h-3.5 w-3.5" />DHL API ile gönderi oluştur</button>}
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <select value={company} onChange={(e) => setCompany(e.target.value as ShippingCompany)} className="input max-w-[170px]"><option value="dhl">DHL</option><option value="hepsijet">Hepsijet</option></select>
+            <select value={company} onChange={(e) => setCompany(e.target.value as ShippingCompany)} className="input max-w-[170px]">{(Object.entries(SHIPPING_COMPANIES) as [ShippingCompany, string][]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
             <input value={trackingNo} onChange={(e) => setTrackingNo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (document.getElementById('ship-save') as HTMLButtonElement)?.click(); }} placeholder="Takip numarası (isteğe bağlı)" className="input max-w-xs" />
-            <button id="ship-save" disabled={busy} onClick={() => run(() => api.post(`/api/orders/${order.id}/shipment`, { ...fields(), company, tracking_no: trackingNo.trim() }), 'Kargoya verildi olarak kaydedildi')} className="btn btn-sm btn-primary">Kargoya verildi olarak kaydet</button>
+            <button id="ship-save" disabled={busy} onClick={() => run(() => api.post(`/api/orders/${order.id}/shipment`, { ...fields(), company, tracking_no: trackingNo.trim() }), company === 'elden_teslim' ? 'Elden teslim edildi' : 'Kargoya verildi olarak kaydedildi')} className="btn btn-sm btn-primary">{company === 'elden_teslim' ? 'Elden teslim edildi' : 'Kargoya verildi olarak kaydet'}</button>
           </div>
           <ConfirmDialog open={confirmApi} text="DHL API üzerinden gönderi oluşturulsun mu? Alıcı bilgileri ve desi DHL'ye iletilecek." okLabel="Oluştur" busy={busy} onCancel={() => setConfirmApi(false)} onConfirm={async () => { const ok = await run(() => api.post(`/api/orders/${order.id}/shipment`, { ...fields(), create_dhl: true }), 'DHL gönderisi oluşturuldu'); if (ok) setConfirmApi(false); }} />
         </div>
@@ -96,7 +96,7 @@ export function ShipmentCard({ order, copyBlock, canCreate, canTrack, onlineSube
       {order.shipping_company && (
         <div className="space-y-3">
           <dl className="kv">
-            <dt>Kargo Şirketi</dt><dd>{order.shipping_company === 'dhl' ? 'DHL' : 'Hepsijet'}</dd>
+            <dt>Teslimat şekli</dt><dd>{SHIPPING_COMPANIES[order.shipping_company]}</dd>
             {order.shipping_tracking_no && <><dt>Takip No</dt><dd className="flex flex-wrap items-center gap-2"><span className="font-mono">{order.shipping_tracking_no}</span>{order.tracking_url && <a href={order.tracking_url} target="_blank" rel="noopener" className="text-primary-text hover:underline">takip <ExternalLink className="inline h-3 w-3" /></a>}<button onClick={async () => { if (await copyText(order.shipping_tracking_no!)) toast('Kopyalandı', 'ok'); }} className="btn btn-xs">kopyala</button></dd></>}
             {order.shipping_company === 'dhl' && <><dt>DHL durumu</dt><dd>{order.dhl_status_text || '—'}{order.dhl_last_check && <span className="ml-2 text-xs text-neutral-500">son kontrol {fmtDate(order.dhl_last_check)}</span>}</dd></>}
             {order.shipped_at && <><dt>Kargo tarihi</dt><dd>{fmtDate(order.shipped_at)}</dd></>}
@@ -141,14 +141,16 @@ export function StatusActions({ id, status, next }: { id: number; status: OrderS
 /* ---------------- Ödeme ---------------- */
 export function PaymentCard({ id, payment_status, payment_method, total, closed }: { id: number; payment_status: PaymentStatus; payment_method: string; total: number; closed: boolean }) {
   const { run, busy } = useAction();
+  const isAccountOrder = payment_method === ACCOUNT_PAYMENT_METHOD;
   const [edit, setEdit] = useState(false);
   const [st, setSt] = useState<PaymentStatus>(payment_status);
   const [method, setMethod] = useState(payment_method || '');
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between"><PaymentPill status={payment_status} /><span className="text-lg font-semibold">{money(total)}</span></div>
+      <div className="flex items-center justify-between"><PaymentPill status={payment_status} method={payment_method} /><span className="text-lg font-semibold">{money(total)}</span></div>
       <p className="text-sm text-neutral-600">{payment_method || <span className="text-neutral-400">Ödeme yöntemi girilmedi</span>}</p>
-      {!closed && !edit && (
+      {isAccountOrder && <p className="rounded-md bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">Bu tutar müşterinin cari bakiyesine borç işlendi. Tahsilat durumunu ve tutarını <Link href="/cariler" className="font-medium underline">Cari Hesaplar</Link> ekranından kaydedin.</p>}
+      {!closed && !edit && !isAccountOrder && (
         <div className="flex flex-wrap gap-2">
           {payment_status !== 'alindi' && <button disabled={busy} onClick={() => run(() => api.post(`/api/orders/${id}/payment`, { payment_status: 'alindi', payment_method: payment_method || 'Havale / EFT' }), 'Ödeme alındı olarak işaretlendi')} className="btn btn-sm btn-primary"><Check className="h-3.5 w-3.5" />Ödeme alındı</button>}
           <button onClick={() => setEdit(true)} className="btn btn-sm"><Pencil className="h-3.5 w-3.5" />Düzenle</button>
@@ -157,7 +159,7 @@ export function PaymentCard({ id, payment_status, payment_method, total, closed 
       {edit && (
         <div className="space-y-2 rounded-md border border-neutral-200 bg-neutral-50 p-3">
           <Field label="Ödeme durumu"><select value={st} onChange={(e) => setSt(e.target.value as PaymentStatus)} className="input">{(Object.keys(PAYMENT_STATUSES) as PaymentStatus[]).map((k) => <option key={k} value={k}>{PAYMENT_STATUSES[k].label}</option>)}</select></Field>
-          <Field label="Ödeme yöntemi"><input list="pay-methods" value={method} onChange={(e) => setMethod(e.target.value)} className="input" placeholder="Havale / EFT" /><datalist id="pay-methods">{PAYMENT_METHODS.map((m) => <option key={m} value={m} />)}</datalist></Field>
+          <Field label="Ödeme yöntemi"><input list="pay-methods" value={method} onChange={(e) => { setMethod(e.target.value); if (e.target.value === ACCOUNT_PAYMENT_METHOD) setSt('bekleniyor'); }} className="input" placeholder="Havale / EFT" /><datalist id="pay-methods">{PAYMENT_METHODS.map((m) => <option key={m} value={m} />)}<option value={ACCOUNT_PAYMENT_METHOD} /></datalist></Field>
           <div className="flex gap-2"><button onClick={() => setEdit(false)} className="btn btn-sm">Vazgeç</button><button disabled={busy} onClick={async () => { const ok = await run(() => api.post(`/api/orders/${id}/payment`, { payment_status: st, payment_method: method }), 'Ödeme güncellendi'); if (ok) setEdit(false); }} className="btn btn-sm btn-primary">Kaydet</button></div>
         </div>
       )}

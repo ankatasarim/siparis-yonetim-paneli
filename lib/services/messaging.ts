@@ -4,7 +4,7 @@ import { eq, isIn } from '../store';
 import * as orders from './orders';
 import * as customers from './customers';
 import * as instagram from '../integrations/instagram';
-import { trackingUrl, MESSAGE_KIND_LABELS } from '../constants';
+import { trackingUrl, MESSAGE_KIND_LABELS, SHIPPING_COMPANIES } from '../constants';
 import { now, firstName, httpError } from '../utils';
 import type { Customer, Message, Order, OrderFull } from '../types';
 
@@ -90,7 +90,7 @@ export function buildContext(order: Order, customer: Customer | null) {
     siparis_no: '#' + order.order_no,
     takip_no: order.shipping_tracking_no || order.dhl_tracking_no || '',
     takip_link: order.shipping_company === 'dhl' && (order.shipping_tracking_no || order.dhl_tracking_no) ? trackingUrl(order.shipping_tracking_no || order.dhl_tracking_no!) : '',
-    kargo_sirketi: order.shipping_company === 'hepsijet' ? 'Hepsijet' : order.shipping_company === 'dhl' ? 'DHL' : 'kargo şirketi',
+    kargo_sirketi: order.shipping_company ? SHIPPING_COMPANIES[order.shipping_company] : 'kargo şirketi',
     urunler: order.items || '',
     tutar: order.total ? '₺' + Number(order.total).toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '',
     isletme: cfg.business.name,

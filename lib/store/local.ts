@@ -22,7 +22,7 @@ const DEFAULTS: Record<Table, Row> = {
   messages: { order_id: null, channel: 'instagram', ig_mid: null, text: '', attachments: '[]', status: 'ok', error: null, kind: null, is_read: 0 },
   order_events: { description: '', meta: null },
   finance_transactions: { type: 'expense', category: '', description: '', amount: 0, date: '', notes: '' },
-  account_transactions: { type: 'charge', description: '', amount: 0, date: '', notes: '' },
+  account_transactions: { type: 'charge', order_id: null, description: '', amount: 0, date: '', notes: '' },
   settings: { value: null },
 };
 

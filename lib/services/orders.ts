@@ -2,8 +2,9 @@ import * as db from '../db';
 import { cfg } from '../config';
 import { eq, gt, ilike, isIn, isNull, isUniqueViolation, lt, or, type Cond, type Row, type Where } from '../store';
 import { httpError, now, normalizeTr, pick, round2, toNumber } from '../utils';
-import { STATUSES, ACTIVE_STATUSES, PAYMENT_STATUSES, SHIPPING_PAYERS, SATISFACTION_LABELS, ORDER_SOURCES, DEFAULT_SOURCE, trackingUrl } from '../constants';
+import { STATUSES, ACTIVE_STATUSES, PAYMENT_STATUSES, SHIPPING_PAYERS, SHIPPING_COMPANIES, SATISFACTION_LABELS, ORDER_SOURCES, DEFAULT_SOURCE, ACCOUNT_PAYMENT_METHOD, trackingUrl } from '../constants';
 import * as dhl from '../integrations/dhl';
+import * as accounts from './accounts';
 import type { Customer, Dashboard, Order, OrderEvent, OrderFull, OrderLine, OrderRow, OrderSource, OrderStatus, PaymentStatus, Satisfaction, Message, ShippingCompany } from '../types';
 
 /* ---------- Kancalar ----------
@@ -224,6 +225,16 @@ export async function listForDhlExport(opts: { statuses: OrderStatus[]; skipTrac
   return rows.map((r) => ({ order: hydrate(r) as Order, customer: map.get(Number(r.customer_id)) as Customer })).filter((x) => x.customer);
 }
 
+/** Porego sipariş aktarımı için hazırlandı durumundaki tüm siparişler ve müşterileri. */
+export async function listForPoregoExport(selectedOrderIds?: number[]): Promise<{ order: Order; customer: Customer }[]> {
+  const where: Where[] = selectedOrderIds?.length ? [isIn('id', selectedOrderIds)] : [eq('status', 'hazirlandi')];
+  const rows = await db.selectAll({ table: 'orders', where, order: [{ col: 'order_no' }] }, 500, 2000);
+  const customerIds = [...new Set(rows.map((r) => Number(r.customer_id)))];
+  const custs = customerIds.length ? await db.selectAll<Customer>({ table: 'customers', where: [isIn('id', customerIds)] }) : [];
+  const map = new Map(custs.map((c) => [c.id, c]));
+  return rows.map((r) => ({ order: hydrate(r) as Order, customer: map.get(Number(r.customer_id)) as Customer })).filter((x) => x.customer);
+}
+
 export async function addEvent(orderId: number | string, type: string, description: string, meta?: Record<string, unknown> | null): Promise<void> {
   await S().insert('order_events', { order_id: Number(orderId), type, description: description || '', meta: meta ? JSON.stringify(meta) : null, created_at: now() });
 }
@@ -237,9 +248,13 @@ export async function create(data: Record<string, unknown>): Promise<OrderFull> 
     shipping_payer: 'gonderici', shipping_fee: 0, payment_status: 'bekleniyor', payment_method: '', source: DEFAULT_SOURCE,
     ...cleanFields(data),
   } as Record<string, unknown>;
+  if (f.payment_method === ACCOUNT_PAYMENT_METHOD && f.payment_status !== 'bekleniyor') {
+    throw httpError(400, 'Cari hesaplı siparişin ödemesi tahsilat girilene kadar beklemede kalmalıdır');
+  }
   const lines = JSON.parse(f.lines_json as string) as OrderLine[];
   if (!lines.length) throw httpError(400, 'En az bir ürün satırı girin');
   const { subtotal, total } = calcTotals(lines, Number(f.shipping_fee) || 0);
+  if (f.payment_method === ACCOUNT_PAYMENT_METHOD && total <= 0) throw httpError(400, 'Cari hesaba kaydedilecek sipariş tutarı sıfırdan büyük olmalıdır');
   const t = now();
   let id = 0;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -257,7 +272,19 @@ export async function create(data: Record<string, unknown>): Promise<OrderFull> 
       throw e;
     }
   }
+  if (f.payment_method === ACCOUNT_PAYMENT_METHOD) {
+    try {
+      const createdOrder = await getRaw(id);
+      if (!createdOrder) throw httpError(500, 'Sipariş kaydı oluşturulamadı');
+      await accounts.syncOrderCharge(createdOrder);
+    } catch (e) {
+      await S().remove('account_transactions', [eq('order_id', id)]);
+      await S().remove('orders', [eq('id', id)]);
+      throw e;
+    }
+  }
   await addEvent(id, 'olusturuldu', `Sipariş oluşturuldu (${ORDER_SOURCES[f.source as OrderSource]?.label || f.source})`);
+  if (f.payment_method === ACCOUNT_PAYMENT_METHOD) await addEvent(id, 'cari', 'Sipariş tutarı müşteri cari hesabına borç kaydedildi');
   if (f.payment_status === 'alindi') await addEvent(id, 'odeme', `Ödeme alındı${f.payment_method ? ' · ' + f.payment_method : ''}`);
   await fire('created', (await get(id))!);
   return (await get(id))!;
@@ -267,6 +294,14 @@ export async function update(id: number | string, data: unknown): Promise<OrderF
   const existing = await getRaw(id);
   if (!existing) throw httpError(404, 'Sipariş bulunamadı');
   const f = cleanFields(data);
+  const requestedMethod = String(f.payment_method ?? existing.payment_method ?? '').trim();
+  const requestedStatus = f.payment_status ?? existing.payment_status;
+  if (existing.payment_method === ACCOUNT_PAYMENT_METHOD && requestedMethod !== ACCOUNT_PAYMENT_METHOD) {
+    throw httpError(400, 'Cari hesaba aktarılmış siparişin ödeme yöntemi değiştirilemez; tahsilatı Cari Hesaplar ekranından kaydedin');
+  }
+  if (requestedMethod === ACCOUNT_PAYMENT_METHOD && requestedStatus !== 'bekleniyor') {
+    throw httpError(400, 'Cari hesaplı siparişin ödemesi tahsilat girilene kadar beklemede kalmalıdır');
+  }
   const cid = (data as Record<string, unknown> | null)?.customer_id;
   if (cid != null && cid !== '' && Number(cid) !== existing.customer_id) {
     if (!validId(cid as number)) throw httpError(400, 'Geçersiz müşteri');
@@ -280,12 +315,17 @@ export async function update(id: number | string, data: unknown): Promise<OrderF
   if (!lines.length) throw httpError(400, 'En az bir ürün satırı girin');
   const shippingFee = 'shipping_fee' in f ? Number(f.shipping_fee) : existing.shipping_fee;
   const { subtotal, total } = calcTotals(lines, shippingFee);
+  if (requestedMethod === ACCOUNT_PAYMENT_METHOD && total <= 0) throw httpError(400, 'Cari hesaba kaydedilecek sipariş tutarı sıfırdan büyük olmalıdır');
   f.subtotal = subtotal;
   f.total = total;
   if ('payment_status' in f && f.payment_status !== existing.payment_status) {
     await addEvent(existing.id, 'odeme', `Ödeme durumu: ${PAYMENT_STATUSES[f.payment_status as PaymentStatus].label}${f.payment_method ? ' · ' + f.payment_method : ''}`);
   }
   await S().update('orders', [eq('id', existing.id)], { ...f, updated_at: now() });
+  if (requestedMethod === ACCOUNT_PAYMENT_METHOD) {
+    const updated = await getRaw(existing.id);
+    if (updated) await accounts.syncOrderCharge(updated);
+  }
   return (await get(id))!;
 }
 
@@ -293,6 +333,7 @@ export async function remove(id: number | string): Promise<boolean> {
   const existing = await getRaw(id);
   if (!existing) throw httpError(404, 'Sipariş bulunamadı');
   await S().update('messages', [eq('order_id', existing.id)], { order_id: null });
+  await S().remove('account_transactions', [eq('order_id', existing.id)]);
   await S().remove('order_events', [eq('order_id', existing.id)]);
   await S().remove('orders', [eq('id', existing.id)]);
   return true;
@@ -322,6 +363,10 @@ export async function setStatus(id: number | string, status: OrderStatus, opts: 
   await S().update('orders', [eq('id', order.id)], patch);
   const by = opts.by || 'panel';
   await addEvent(order.id, 'durum', `${from.label} → ${STATUSES[status].label}${opts.note ? ' · ' + opts.note : ''}`, { from: order.status, to: status, by });
+  if (status === 'iptal' && order.payment_method === ACCOUNT_PAYMENT_METHOD) {
+    await S().remove('account_transactions', [eq('order_id', order.id)]);
+    await addEvent(order.id, 'cari', 'İptal edilen siparişin cari borç hareketi kaldırıldı');
+  }
   // DHL API ile oluşturulmuş sipariş (referans + DHL sipariş kaydı) iptal edilince DHL tarafında da iptal dene; başarısızlık akışı durdurmaz.
   if (status === 'iptal' && order.dhl_tracking_no && order.dhl_shipment_ref && dhl.canCreate()) {
     try {
@@ -341,9 +386,9 @@ export async function recordShipment(id: number | string, { company, tracking_no
   const order = await getRaw(id);
   if (!order) throw httpError(404, 'Sipariş bulunamadı');
   const tracking = String(tracking_no || '').replace(/\s+/g, '').trim();
-  if (!['dhl', 'hepsijet'].includes(company)) throw httpError(400, 'Geçersiz kargo şirketi');
+  if (!SHIPPING_COMPANIES[company]) throw httpError(400, 'Geçersiz kargo şirketi');
   if (['iptal', 'teslim_edildi'].includes(order.status)) throw httpError(400, 'Bu sipariş için kargo kaydı yapılamaz');
-  if (order.status === 'yeni') await setStatus(id, 'hazirlaniyor', { by: by || 'panel', note: 'Kargo kaydı ile otomatik' });
+  if (company !== 'elden_teslim' && order.status === 'yeni') await setStatus(id, 'hazirlaniyor', { by: by || 'panel', note: 'Kargo kaydı ile otomatik' });
   const patch: Record<string, unknown> = {
     shipping_company: company,
     shipping_tracking_no: tracking || null,
@@ -359,7 +404,8 @@ export async function recordShipment(id: number | string, { company, tracking_no
     patch.dhl_status_text = null;
   }
   await S().update('orders', [eq('id', order.id)], patch);
-  await addEvent(order.id, 'kargo', `${company === 'dhl' ? 'DHL' : 'Hepsijet'} kargoya verildi${tracking ? ` · Takip No: ${tracking}` : ''}`, { company, tracking_no: tracking || null, shipment_ref: shipment_ref || null });
+  await addEvent(order.id, 'kargo', `${SHIPPING_COMPANIES[company]}${company === 'elden_teslim' ? ' olarak teslim edildi' : ' kargoya verildi'}${tracking ? ` · Takip No: ${tracking}` : ''}`, { company, tracking_no: tracking || null, shipment_ref: shipment_ref || null });
+  if (company === 'elden_teslim') return setStatus(id, 'teslim_edildi', { by: by || 'panel', note: 'Elden teslim', force: true });
   if (order.status === 'kargoya_verildi') return (await get(id))!;
   return setStatus(id, 'kargoya_verildi', { by: by || 'panel' });
 }

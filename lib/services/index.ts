@@ -7,6 +7,7 @@ export * as inbox from './inbox';
 export * as automation from './automation';
 export * as backup from './backup';
 export * as finance from './finance';
+export * as reports from './reports';
 export * as accounts from './accounts';
 export * as instagram from '../integrations/instagram';
 export * as dhl from '../integrations/dhl';

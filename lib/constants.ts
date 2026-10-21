@@ -1,4 +1,4 @@
-import type { OrderSource, OrderStatus, PaymentStatus, Satisfaction, ShippingPayer } from './types';
+import type { OrderSource, OrderStatus, PaymentStatus, Satisfaction, ShippingCompany, ShippingPayer } from './types';
 
 export const STATUSES: Record<OrderStatus, { label: string; next: OrderStatus[]; pill: string; dot: string }> = {
   yeni:            { label: 'Yeni Sipariş',    next: ['hazirlaniyor', 'iptal'],    pill: 'border-blue-300 text-blue-700 bg-blue-50',        dot: 'bg-blue-500' },
@@ -23,6 +23,12 @@ export const SHIPPING_PAYERS: Record<ShippingPayer, string> = {
   alici: 'Alıcı öder (karşı ödemeli)',
 };
 
+export const SHIPPING_COMPANIES: Record<ShippingCompany, string> = {
+  dhl: 'DHL',
+  hepsijet: 'Hepsijet',
+  elden_teslim: 'Elden teslim',
+};
+
 export const SATISFACTION_LABELS: Record<Satisfaction, string> = {
   bekleniyor: 'Cevap bekleniyor',
   memnun: 'Memnun',
@@ -32,6 +38,7 @@ export const SATISFACTION_LABELS: Record<Satisfaction, string> = {
 };
 
 export const PAYMENT_METHODS = ['Havale / EFT', 'Kapıda ödeme', 'Kredi kartı', 'Diğer'];
+export const ACCOUNT_PAYMENT_METHOD = 'Cari Hesap';
 
 /** Sipariş kanalları (sipariş formunda seçilir, listede ve detayda gösterilir). */
 export const ORDER_SOURCES: Record<OrderSource, { label: string }> = {

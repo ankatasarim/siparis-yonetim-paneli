@@ -40,7 +40,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                     <td className="td font-semibold">#{o.order_no}</td>
                     <td className="td">{trunc(o.items, 50)}</td>
                     <td className="td"><StatusMenu id={o.id} orderNo={o.order_no} status={o.status} shippingCompany={o.shipping_company} trackingNo={o.shipping_tracking_no} /></td>
-                    <td className="td"><PaymentPill status={o.payment_status} /></td>
+                    <td className="td"><PaymentPill status={o.payment_status} method={o.payment_method} /></td>
                     <td className="td text-right font-medium">{money(o.total)}</td>
                     <td className="td whitespace-nowrap text-neutral-600">{fmtDay(o.created_at)}</td>
                   </RowLink>

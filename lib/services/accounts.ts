@@ -2,11 +2,12 @@ import * as db from '../db';
 import * as customers from './customers';
 import { eq } from '../store';
 import { httpError, now, round2, toNumber } from '../utils';
-import type { Customer } from '../types';
+import type { Customer, Order, OrderLine } from '../types';
 
 export interface AccountTransaction {
   id: number;
   customer_id: number;
+  order_id: number | null;
   type: 'charge' | 'payment';
   description: string;
   amount: number;
@@ -78,6 +79,24 @@ export async function create(input: unknown) {
   const date = validDate(data.date);
   const notes = String(data.notes || '').trim().slice(0, 500);
   return db.store().insert<AccountTransaction>('account_transactions', {
-    customer_id: customer.id, type: data.type, amount: round2(amount), description, date, notes, created_at: now(),
+    customer_id: customer.id, order_id: null, type: data.type, amount: round2(amount), description, date, notes, created_at: now(),
   });
+}
+
+/** Sipariş vadeli açıldığında müşteri ekstresine sipariş borcunu ekler veya sipariş düzenlenince günceller. */
+export async function syncOrderCharge(order: Pick<Order, 'id' | 'order_no' | 'customer_id' | 'total' | 'created_at' | 'lines'>) {
+  const existing = (await db.store().select<AccountTransaction>({
+    table: 'account_transactions', where: [eq('order_id', order.id), eq('type', 'charge')], limit: 1,
+  })).rows[0];
+  const description = `Sipariş #${order.order_no} · ${order.lines.map((line: OrderLine) => `${line.qty}× ${line.name}`).join(', ')}`.slice(0, 160);
+  const patch = {
+    customer_id: order.customer_id, order_id: order.id, type: 'charge' as const,
+    amount: round2(Number(order.total) || 0), description,
+    date: String(order.created_at).slice(0, 10), notes: 'Vadeli sipariş borcu',
+  };
+  if (existing) {
+    await db.store().update('account_transactions', [eq('id', existing.id)], patch);
+    return { ...existing, ...patch };
+  }
+  return db.store().insert<AccountTransaction>('account_transactions', { ...patch, created_at: now() });
 }

@@ -10,11 +10,25 @@ import type { FinanceEntry } from '@/lib/services/finance';
 type Data = { month: string; entries: FinanceEntry[]; income: number; expense: number; net: number };
 const EXPENSE_CATEGORIES = ['Ürün / malzeme', 'Kargo', 'Paketleme', 'Reklam', 'Ofis / kira', 'Ulaşım', 'Diğer'];
 const INCOME_CATEGORIES = ['Diğer gelir', 'İade', 'Hizmet geliri', 'Diğer'];
+const ALL_CATEGORIES = [...new Set([...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES])];
 const today = () => {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 const dateForMonth = (month: string) => today().startsWith(`${month}-`) ? today() : `${month}-01`;
+
+export function filterFinanceEntries(entries: FinanceEntry[], query: string, typeFilter: 'all' | 'income' | 'expense', categoryFilter: string) {
+  const q = query.trim().toLocaleLowerCase('tr-TR');
+  const selectedType = typeFilter === 'all' ? null : typeFilter;
+  const selectedCategory = categoryFilter && categoryFilter !== 'all' ? categoryFilter : null;
+
+  return entries.filter((entry) => {
+    if (selectedType && entry.type !== selectedType) return false;
+    if (selectedCategory && entry.category !== selectedCategory) return false;
+    if (!q) return true;
+    return `${entry.description} ${entry.category} ${entry.notes}`.toLocaleLowerCase('tr-TR').includes(q);
+  });
+}
 
 export function FinanceClient({ initial }: { initial: Data }) {
   const [data, setData] = useState(initial);
@@ -28,6 +42,8 @@ export function FinanceClient({ initial }: { initial: Data }) {
   const [date, setDate] = useState(today());
   const [notes, setNotes] = useState('');
   const [query, setQuery] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
+  const [filterCategory, setFilterCategory] = useState('all');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -40,14 +56,33 @@ export function FinanceClient({ initial }: { initial: Data }) {
     finally { setLoading(false); }
   };
 
-  const entries = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase('tr-TR');
-    return data.entries.filter((entry) => !q || `${entry.description} ${entry.category} ${entry.notes}`.toLocaleLowerCase('tr-TR').includes(q));
-  }, [data.entries, query]);
+  const entries = useMemo(
+    () => filterFinanceEntries(data.entries, query, filterType, filterCategory),
+    [data.entries, query, filterType, filterCategory],
+  );
+
+  const filteredTotals = useMemo(() => {
+    const income = entries.filter((entry) => entry.type === 'income').reduce((sum, entry) => sum + entry.amount, 0);
+    const expense = entries.filter((entry) => entry.type === 'expense').reduce((sum, entry) => sum + entry.amount, 0);
+    return { income, expense, net: income - expense };
+  }, [entries]);
+
+  const categoryOptions = useMemo(() => {
+    const options = filterType === 'income' ? INCOME_CATEGORIES : filterType === 'expense' ? EXPENSE_CATEGORIES : ALL_CATEGORIES;
+    return ['Tümü', ...options];
+  }, [filterType]);
 
   const switchType = (next: 'income' | 'expense') => {
     setType(next);
     setCategory(next === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]);
+  };
+
+  const handleFilterType = (next: 'all' | 'income' | 'expense') => {
+    setFilterType(next);
+    setFilterCategory((current) => {
+      const valid = next === 'income' ? INCOME_CATEGORIES : next === 'expense' ? EXPENSE_CATEGORIES : ALL_CATEGORIES;
+      return valid.includes(current) ? current : 'all';
+    });
   };
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -73,7 +108,7 @@ export function FinanceClient({ initial }: { initial: Data }) {
 
   const netPositive = data.net >= 0;
   const max = Math.max(data.income, data.expense, 1);
-  const categoryOptions = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const formCategoryOptions = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
   return (
     <>
@@ -115,7 +150,13 @@ export function FinanceClient({ initial }: { initial: Data }) {
       <section className="card overflow-hidden">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 sm:px-5">
           <div><h2 className="text-[15px] font-semibold">Hareketler</h2><p className="mt-0.5 text-xs text-neutral-500">{entries.length} kayıt</p></div>
-          <label className="relative w-full sm:w-64"><Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Kayıtlarda ara" className="input pl-9" /></label>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <label className="relative w-full sm:w-64"><Search aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Kayıtlarda ara" className="input pl-9" /></label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-xs text-neutral-500"><span>Tür</span><select value={filterType} onChange={(event) => handleFilterType(event.target.value as 'all' | 'income' | 'expense')} className="input h-9 min-w-[120px] py-1.5"><option value="all">Tümü</option><option value="income">Gelir</option><option value="expense">Gider</option></select></label>
+              <label className="flex items-center gap-2 text-xs text-neutral-500"><span>Kategori</span><select value={filterCategory} onChange={(event) => setFilterCategory(event.target.value)} className="input h-9 min-w-[150px] py-1.5">{categoryOptions.map((item) => <option key={item} value={item === 'Tümü' ? 'all' : item}>{item}</option>)}</select></label>
+            </div>
+          </div>
         </header>
         {loading ? <div className="flex justify-center py-12 text-neutral-400"><LoaderCircle className="h-5 w-5 animate-spin" /></div> : entries.length ? (
           <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left">
@@ -127,6 +168,20 @@ export function FinanceClient({ initial }: { initial: Data }) {
               <td className={`td whitespace-nowrap text-right font-semibold ${entry.type === 'income' ? 'text-emerald-700' : 'text-rose-700'}`}>{entry.type === 'income' ? '+' : '−'} {money(entry.amount)}</td>
               <td className="td text-right">{entry.source === 'manual' && <button aria-label={`${entry.description} kaydını sil`} title="Kaydı sil" onClick={() => void remove(entry)} className="rounded p-1.5 text-neutral-400 opacity-0 transition hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 focus:opacity-100"><Trash2 className="h-4 w-4" /></button>}</td>
             </tr>)}</tbody>
+            <tfoot>
+              <tr className="border-t border-neutral-200 bg-neutral-50">
+                <td colSpan={2} className="px-3 py-3 text-sm font-semibold text-neutral-700">Filtre toplamı</td>
+                <td className="px-3 py-3 text-sm text-neutral-600">{filterType === 'all' ? 'Tüm hareketler' : filterType === 'income' ? 'Sadece gelir' : 'Sadece gider'}</td>
+                <td className="px-3 py-3 text-right text-sm">
+                  <div className="space-y-1">
+                    <div className="font-semibold text-emerald-700">+ {money(filteredTotals.income)}</div>
+                    <div className="font-semibold text-rose-700">− {money(filteredTotals.expense)}</div>
+                    <div className={`font-semibold ${filteredTotals.net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{filteredTotals.net >= 0 ? '+' : '−'} {money(Math.abs(filteredTotals.net))}</div>
+                  </div>
+                </td>
+                <td className="px-3 py-3" />
+              </tr>
+            </tfoot>
           </table></div>
         ) : <div className="px-5 py-12 text-center"><div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-neutral-100 text-neutral-500"><Wallet className="h-5 w-5" /></div><p className="font-medium">Bu dönemde hareket yok</p><p className="mt-1 text-sm text-neutral-500">İlk gelir veya gider kaydınızı ekleyerek başlayın.</p></div>}
       </section>
@@ -141,7 +196,7 @@ export function FinanceClient({ initial }: { initial: Data }) {
               <div><label htmlFor="finance-date" className="label">Tarih</label><input id="finance-date" required type="date" value={date} onChange={(event) => setDate(event.target.value)} className="input" /></div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div><label htmlFor="finance-category" className="label">Kategori</label><select id="finance-category" value={category} onChange={(event) => setCategory(event.target.value)} className="input">{categoryOptions.map((item) => <option key={item}>{item}</option>)}</select></div>
+              <div><label htmlFor="finance-category" className="label">Kategori</label><select id="finance-category" value={category} onChange={(event) => setCategory(event.target.value)} className="input">{formCategoryOptions.map((item) => <option key={item}>{item}</option>)}</select></div>
               <div><label htmlFor="finance-description" className="label">Açıklama</label><input id="finance-description" required maxLength={160} value={description} onChange={(event) => setDescription(event.target.value)} placeholder={type === 'expense' ? 'Örn. kargo malzemesi' : 'Örn. ek satış'} className="input" /></div>
             </div>
             <div><label htmlFor="finance-notes" className="label">Not <span className="font-normal">(isteğe bağlı)</span></label><textarea id="finance-notes" maxLength={500} rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Ek bilgi" className="input resize-y" /></div>

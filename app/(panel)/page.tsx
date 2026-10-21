@@ -23,7 +23,7 @@ function OrderList({ items, empty }: { items: OrderRow[]; empty: string }) {
               <p className="text-sm font-medium">{money(o.total)}</p>
               <p className="text-xs text-neutral-500">{fmtShort(o.created_at)}</p>
             </div>
-            <PaymentPill status={o.payment_status} className="hidden 2xl:inline-flex" />
+            <PaymentPill status={o.payment_status} method={o.payment_method} className="hidden 2xl:inline-flex" />
           </Link>
         </li>
       ))}

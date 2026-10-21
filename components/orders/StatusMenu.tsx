@@ -7,7 +7,7 @@ import { api } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import { StatusPill } from '@/components/Pills';
 import { Modal, ConfirmDialog } from '@/components/Modal';
-import { STATUSES } from '@/lib/constants';
+import { STATUSES, SHIPPING_COMPANIES } from '@/lib/constants';
 import type { OrderStatus, ShippingCompany } from '@/lib/types';
 
 const ICONS: Partial<Record<OrderStatus, ReactNode>> = {
@@ -52,7 +52,7 @@ export function StatusMenu({ id, orderNo, status, shippingCompany, trackingNo }:
     try {
       if (s === 'kargoya_verildi' && shipment) await api.post(`/api/orders/${id}/shipment`, { company: shipment.company, tracking_no: shipment.trackingNo });
       else await api.post(`/api/orders/${id}/status`, { status: s });
-      toast(`#${orderNo} → ${STATUSES[s].label}`, 'ok');
+      toast(`#${orderNo} → ${s === 'kargoya_verildi' && shipment?.company === 'elden_teslim' ? STATUSES.teslim_edildi.label : STATUSES[s].label}`, 'ok');
       setAskTracking(false);
       setConfirmCancel(false);
       router.refresh();
@@ -97,7 +97,7 @@ export function StatusMenu({ id, orderNo, status, shippingCompany, trackingNo }:
         <div className="space-y-3">
           <label className="block text-sm font-medium">Kargo şirketi
             <select autoFocus value={company} onChange={(e) => setCompany(e.target.value as ShippingCompany)} className="input mt-1">
-              <option value="dhl">DHL</option><option value="hepsijet">Hepsijet</option>
+              {(Object.entries(SHIPPING_COMPANIES) as [ShippingCompany, string][]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
           <label className="block text-sm font-medium">Takip numarası <span className="font-normal text-neutral-500">(isteğe bağlı)</span>

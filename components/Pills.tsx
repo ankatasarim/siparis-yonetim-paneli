@@ -1,5 +1,5 @@
 import { Check, Clock, Truck, XCircle, Lock, Sparkles, Hourglass, HandCoins, Globe, Instagram, MessageCircle, ShoppingBag, type LucideIcon } from 'lucide-react';
-import { STATUSES, PAYMENT_STATUSES, MESSAGE_STATUS_LABELS, ORDER_SOURCES } from '@/lib/constants';
+import { STATUSES, PAYMENT_STATUSES, MESSAGE_STATUS_LABELS, ORDER_SOURCES, ACCOUNT_PAYMENT_METHOD } from '@/lib/constants';
 import type { OrderSource, OrderStatus, PaymentStatus } from '@/lib/types';
 
 const SOURCE_ICONS: Record<OrderSource, { icon: LucideIcon; color: string }> = {
@@ -19,10 +19,11 @@ export function StatusPill({ status, className = '' }: { status: OrderStatus; cl
   return <span className={`${base} ${s.pill} ${className}`}><Icon className="h-3 w-3" />{s.label}</span>;
 }
 
-export function PaymentPill({ status, className = '' }: { status: PaymentStatus; className?: string }) {
+export function PaymentPill({ status, method, className = '' }: { status: PaymentStatus; method?: string; className?: string }) {
   const s = PAYMENT_STATUSES[status];
-  const Icon = PAY_ICONS[status];
-  return <span className={`${base} ${s.pill} ${className}`}><Icon className="h-3 w-3" />{s.label}</span>;
+  const accountPending = method === ACCOUNT_PAYMENT_METHOD && status === 'bekleniyor';
+  const Icon = accountPending ? HandCoins : PAY_ICONS[status];
+  return <span className={`${base} ${s.pill} ${className}`}><Icon className="h-3 w-3" />{accountPending ? 'Cari Hesapta' : s.label}</span>;
 }
 
 export function MsgStatusPill({ status }: { status: string }) {

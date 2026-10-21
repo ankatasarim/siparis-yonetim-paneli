@@ -7,10 +7,11 @@ import { Pagination } from '@/components/Pagination';
 import { RowLink } from '@/components/RowLink';
 import { PaymentPill, SourcePill } from '@/components/Pills';
 import { StatusMenu } from '@/components/orders/StatusMenu';
-import { DhlExportButton } from '@/components/orders/DhlExportButton';
+import { PoregoExportButton } from '@/components/orders/PoregoExportButton';
+import { OrderSelectCheckbox, OrderSelectionProvider, SelectedOrdersExportButton } from '@/components/orders/OrderSelection';
 import { CartPopup } from '@/components/orders/CartPopup';
 import { Empty } from '@/components/ui';
-import { SATISFACTION_LABELS } from '@/lib/constants';
+import { SATISFACTION_LABELS, SHIPPING_COMPANIES, SHIPPING_PAYERS } from '@/lib/constants';
 import { fmtDay, fmtTime, fmtShort, trunc } from '@/lib/format';
 import type { OrderRow } from '@/lib/types';
 
@@ -31,13 +32,15 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   );
 
   return (
+    <OrderSelectionProvider>
     <>
       <PageHeader
         title="Siparişler"
         info="Satıra tıklayarak detaya gidin; durum rozetine tıklayarak durumu listeden değiştirin."
         actions={<>
           <a href="/api/orders/export" className="btn"><Upload className="h-4 w-4" /><span className="hidden sm:inline">CSV</span><span className="sm:hidden">CSV</span></a>
-          <DhlExportButton />
+          <PoregoExportButton />
+          <SelectedOrdersExportButton />
           <Link href="/siparisler/yeni" className="btn btn-primary">Sipariş Oluştur</Link>
         </>}
       />
@@ -48,6 +51,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         {rows.map((o) => (
           <div key={o.id} className="card px-4 py-3">
             <div className="flex items-start justify-between gap-3">
+              <OrderSelectCheckbox id={o.id} orderNo={o.order_no} />
               <Link href={`/siparisler/${o.id}`} className="min-w-0 flex-1">
                 <p className="text-sm"><span className="font-semibold">#{o.order_no}</span> <span className="text-neutral-500">· {fmtShort(o.created_at)}</span></p>
                 <p className="truncate font-medium">{custName(o)}</p>
@@ -57,9 +61,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             </div>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               <StatusMenu id={o.id} orderNo={o.order_no} status={o.status} shippingCompany={o.shipping_company} trackingNo={o.shipping_tracking_no} />
-              <PaymentPill status={o.payment_status} />
+              <PaymentPill status={o.payment_status} method={o.payment_method} />
               <SourcePill source={o.source} className="!text-xs text-neutral-600" />
               {o.shipping_tracking_no && <span className="font-mono text-[11px] text-neutral-500">📦 {o.shipping_tracking_no}</span>}
+              <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-600">{SHIPPING_PAYERS[o.shipping_payer]}</span>
             </div>
           </div>
         ))}
@@ -73,6 +78,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           <table className="w-full min-w-[980px]">
             <thead>
               <tr>
+                <th className="th w-10"><span className="sr-only">Seç</span></th>
                 <th className="th">Sipariş</th>
                 <th className="th">Tarih</th>
                 <th className="th">Müşteri</th>
@@ -88,6 +94,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               {rows.map((o) => {
                 return (
                   <RowLink key={o.id} href={`/siparisler/${o.id}`}>
+                    <td className="td"><OrderSelectCheckbox id={o.id} orderNo={o.order_no} /></td>
                     <td className="td font-semibold">{o.order_no}</td>
                     <td className="td whitespace-nowrap">{fmtDay(o.created_at)}<div className="text-xs text-neutral-500">{fmtTime(o.created_at)}</div></td>
                     <td className="td">
@@ -98,15 +105,15 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                       <StatusMenu id={o.id} orderNo={o.order_no} status={o.status} shippingCompany={o.shipping_company} trackingNo={o.shipping_tracking_no} />
                       {o.satisfaction && o.status === 'teslim_edildi' && <div className="mt-1 text-xs text-neutral-500">{SATISFACTION_LABELS[o.satisfaction]}</div>}
                     </td>
-                    <td className="td"><PaymentPill status={o.payment_status} /></td>
+                    <td className="td"><PaymentPill status={o.payment_status} method={o.payment_method} /></td>
                     <td className="td whitespace-nowrap"><CartPopup order={cart(o)} /></td>
                     <td className="td whitespace-nowrap"><SourcePill source={o.source} /></td>
-                    <td className="td text-xs">{o.shipping_tracking_no ? <><div className="text-neutral-500">{o.shipping_company === 'dhl' ? 'DHL' : 'Hepsijet'}</div><div className="font-mono">{o.shipping_tracking_no}</div><div className="text-neutral-500">{o.shipping_company === 'dhl' ? o.dhl_status_text || '' : ''}</div></> : o.shipping_company ? <span className="text-neutral-500">{o.shipping_company === 'dhl' ? 'DHL' : 'Hepsijet'}</span> : <span className="text-neutral-400">—</span>}</td>
+                    <td className="td text-xs">{o.shipping_tracking_no ? <><div className="text-neutral-500">{o.shipping_company ? SHIPPING_COMPANIES[o.shipping_company] : '—'}</div><div className="font-mono">{o.shipping_tracking_no}</div><div className="text-neutral-500">{o.shipping_company === 'dhl' ? o.dhl_status_text || '' : ''}</div></> : o.shipping_company ? <span className="text-neutral-500">{SHIPPING_COMPANIES[o.shipping_company]}</span> : <span className="text-neutral-400">—</span>}<div className="mt-1 text-[11px] text-neutral-500">{SHIPPING_PAYERS[o.shipping_payer]}</div></td>
                     <td className="td text-xs text-neutral-600">{o.labels ? trunc(o.labels, 48) : <span className="text-neutral-400">—</span>}</td>
                   </RowLink>
                 );
               })}
-              {!rows.length && <tr><td colSpan={9} className="td">{empty}</td></tr>}
+              {!rows.length && <tr><td colSpan={10} className="td">{empty}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -115,5 +122,6 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </div>
       </div>
     </>
+    </OrderSelectionProvider>
   );
 }
