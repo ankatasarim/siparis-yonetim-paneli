@@ -7,6 +7,11 @@ export type MessageStatus = 'ok' | 'pending' | 'failed' | 'manual_sent';
 /** Siparişin geldiği kanal */
 export type OrderSource = 'instagram' | 'whatsapp' | 'shopier';
 
+export interface ProductOptionGroup {
+  name: string;
+  values: string[];
+}
+
 export interface OrderLine {
   name: string;
   qty: number;
@@ -37,8 +42,8 @@ export interface Product {
   image: string;
   /** Ürün desisi (kargo hesabı için); şimdilik 0 */
   desi: number;
-  /** Seçenekler (renk vb.); doluysa sipariş formunda satırda seçim kutusu çıkar. DB'de options_json. */
-  options: string[];
+  /** Ürün varyasyon grupları (örn. Renk ve Boyut); DB'de options_json saklanır. */
+  options: ProductOptionGroup[];
   /** 1 = aktif (sipariş formunda önerilir), 0 = pasif */
   active: number;
   sort_order: number;

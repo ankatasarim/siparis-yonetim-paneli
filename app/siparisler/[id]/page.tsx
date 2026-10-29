@@ -95,7 +95,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <p className="mt-1"><SourcePill source={o.source} /></p>
             <dl className="mt-4 space-y-2 border-t border-neutral-100 pt-3 text-sm">
               <div className="flex justify-between text-neutral-600"><dt>Ara Toplam</dt><dd>{money(o.subtotal)}</dd></div>
-              <div className="flex justify-between text-neutral-600"><dt>KDV ({o.tax_rate || 0}%)</dt><dd>{money(o.subtotal * ((o.tax_rate || 0) / 100))}</dd></div>
+              <div className="flex justify-between text-neutral-600"><dt>KDV ({o.tax_rate || 0}%)</dt><dd>{money((o.subtotal + (o.shipping_fee || 0)) * ((o.tax_rate || 0) / 100))}</dd></div>
               <div className="flex justify-between text-neutral-600"><dt>{o.shipping_payer === 'alici' ? 'Kargo (alıcı öder)' : 'Kargo'}</dt><dd>{money(o.shipping_fee)}</dd></div>
               <div className="flex justify-between border-t border-neutral-100 pt-2 text-base font-semibold"><dt>Toplam</dt><dd>{money(o.total)}</dd></div>
             </dl>

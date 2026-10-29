@@ -57,7 +57,7 @@ export function normalizeLines(input: unknown): OrderLine[] {
     line.unit_name = String(raw.unit_name || 'adet').replace(/\s+/g, ' ').trim().slice(0, 24) || 'adet';
     line.package_name = String(raw.package_name || (unitsPerPackage > 1 ? 'paket' : 'adet')).replace(/\s+/g, ' ').trim().slice(0, 24) || 'adet';
     line.unit_price = unitPrice == null ? null : round2(unitPrice);
-    const variant = String(raw.variant ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const variant = String(raw.variant ?? '').replace(/\s+/g, ' ').trim().slice(0, 240);
     if (variant) line.variant = variant;
     out.push(line);
   }
@@ -74,7 +74,7 @@ export const linesSummary = (lines: OrderLine[]) => lines.map((l) => {
 export function calcTotals(lines: OrderLine[], shippingFee: number, taxRate = 0) {
   const subtotal = round2(lines.reduce((s, l) => s + l.qty * (l.price || 0), 0));
   const rate = Math.max(0, Math.min(100, Number(taxRate) || 0));
-  const tax = round2(subtotal * (rate / 100));
+  const tax = round2((subtotal + (shippingFee || 0)) * (rate / 100));
   return { subtotal, tax, total: round2(subtotal + tax + (shippingFee || 0)) };
 }
 

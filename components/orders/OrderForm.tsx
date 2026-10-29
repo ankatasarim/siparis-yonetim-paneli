@@ -10,7 +10,7 @@ import { Spinner } from '@/components/Loading';
 import { UnsavedGuard } from '@/components/UnsavedGuard';
 import { PAYMENT_STATUSES, SHIPPING_PAYERS, PAYMENT_METHODS, ACCOUNT_PAYMENT_METHOD, ORDER_SOURCES, DEFAULT_SOURCE } from '@/lib/constants';
 import { money } from '@/lib/format';
-import type { Customer, CustomerRow, OrderFull, OrderLine, OrderSource, PaymentStatus, Product, ShippingPayer } from '@/lib/types';
+import type { Customer, CustomerRow, OrderFull, OrderLine, OrderSource, PaymentStatus, Product, ProductOptionGroup, ShippingPayer } from '@/lib/types';
 
 interface LineDraft { name: string; qty: string; unit_qty: string; price: string; product_id?: number | null; variant: string; units_per_package?: number; unit_name?: string; package_name?: string; unit_price: string }
 const toDraft = (l: OrderLine): LineDraft => {
@@ -24,6 +24,16 @@ const num = (v: string) => { const n = Number(String(v).replace(',', '.')); retu
 /** Fiyatı Türkçe ondalık ayraçla gösterir (62.5 → 62,5); num() geri çevirir. */
 const fmtPrice = (n: number | null | undefined) => (n != null ? String(n).replace('.', ',') : '');
 const fmtQty = (n: number) => String(Number(n.toFixed(4))).replace('.', ',');
+const variantValue = (variant: string, group: ProductOptionGroup, groups: ProductOptionGroup[]) => {
+  const prefix = `${group.name}:`;
+  const labelled = variant.split(' · ').find((part) => part.startsWith(prefix));
+  if (labelled) return labelled.slice(prefix.length).trim();
+  return groups.length === 1 && group.values.includes(variant) ? variant : '';
+};
+const formatVariant = (groups: ProductOptionGroup[], selected: Record<string, string>) => groups
+  .filter((group) => selected[group.name])
+  .map((group) => `${group.name}: ${selected[group.name]}`)
+  .join(' · ');
 
 export function OrderForm({ order, customer, prefillText }: { order?: OrderFull; customer?: Customer | null; prefillText?: string }) {
   const router = useRouter();
@@ -78,7 +88,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
 
   const subtotal = lines.reduce((s, l) => s + num(l.qty) * num(l.price), 0);
   const taxRate = num(f.tax_rate);
-  const tax = subtotal * (taxRate / 100);
+  const tax = (subtotal + num(f.shipping_fee)) * (taxRate / 100);
   const total = subtotal + tax + num(f.shipping_fee);
   const setLine = (i: number, patch: Partial<LineDraft>) => setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const removeLine = (i: number) => setLines(lines.length > 1 ? lines.filter((_, j) => j !== i) : [emptyLine()]);
@@ -106,12 +116,10 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
     const price = Number(value.replace(',', '.'));
     setLine(i, { price: value, unit_price: !value.trim() ? '' : Number.isFinite(price) ? fmtPrice(Number((price / size).toFixed(4))) : lines[i].unit_price });
   };
-  // Satırın ürününde seçenek (renk vb.) tanımlıysa listesi; kayıtlı ama listede olmayan eski seçenek de gösterilir.
-  const optionsFor = (l: LineDraft): string[] => {
+  // Sipariş satırında seçim metni saklanır; mevcut ürünün varyasyon grupları form seçeneklerini sağlar.
+  const optionGroupsFor = (l: LineDraft): ProductOptionGroup[] => {
     const p = l.product_id ? products.find((x) => x.id === l.product_id) : null;
-    const opts = p?.options || [];
-    if (!opts.length) return [];
-    return l.variant && !opts.includes(l.variant) ? [l.variant, ...opts] : opts;
+    return p?.options || [];
   };
   const suggestionsFor = (text: string) => { const t = norm(text.trim()); return (t ? products.filter((p) => norm(p.name).includes(t) || norm(p.description).includes(t)) : products).slice(0, 8); };
   const pickProduct = (i: number, p: Product) => {
@@ -124,8 +132,11 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
   const submit = async () => {
     const validLines = lines.filter((l) => l.name.trim());
     if (!validLines.length) return toast('En az bir ürün girin', 'err');
-    const noVariant = validLines.find((l) => optionsFor(l).length > 0 && !l.variant.trim());
-    if (noVariant) return toast(`"${noVariant.name.trim()}" için renk / seçenek seçin`, 'err');
+    const incompleteVariant = validLines.find((l) => {
+      const groups = optionGroupsFor(l);
+      return groups.some((group) => !variantValue(l.variant, group, groups));
+    });
+    if (incompleteVariant) return toast(`"${incompleteVariant.name.trim()}" için tüm ürün varyasyonlarını seçin`, 'err');
     if (!cust.name.trim() && !custId) return toast('Müşteri adı gerekli', 'err');
     setBusy(true);
     const payload = {
@@ -197,7 +208,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
             <div className="hidden border-b border-neutral-100 bg-neutral-50/70 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-neutral-500 sm:block">Ürün ve paket tanımı</div>
             <div className="divide-y divide-neutral-100">
               {lines.map((l, i) => {
-                const opts = optionsFor(l);
+                const optionGroups = optionGroupsFor(l);
                 const sugs = openSug === i ? suggestionsFor(l.name) : [];
                 return (
                   <div key={i} className="px-4 py-3">
@@ -215,7 +226,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
                               {p.image ? <img src={p.image} alt="" className="h-8 w-8 shrink-0 rounded border border-neutral-200 object-cover" /> : <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-neutral-200 bg-neutral-50 text-base">🎨</span>}
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate font-medium">{p.name}</span>
-                                {p.options && p.options.length > 0 ? <span className="block truncate text-xs text-primary-text">{p.options.length} seçenek · {p.options.join(', ')}</span> : p.description ? <span className="block truncate text-xs text-neutral-500">{p.description}</span> : null}
+                                {p.options?.length > 0 ? <span className="block truncate text-xs text-primary-text">{p.options.map((group) => `${group.name} (${group.values.length})`).join(' · ')}</span> : p.description ? <span className="block truncate text-xs text-neutral-500">{p.description}</span> : null}
                               </span>
                               <span className="shrink-0 text-right font-medium text-neutral-700">{p.price != null ? money(p.price) : '—'}{p.units_per_package > 1 && <span className="block text-[10px] font-normal text-neutral-500">{p.unit_price != null ? `${money(p.unit_price)} / ${p.unit_name}` : ''} · {p.units_per_package} {p.unit_name}/{p.package_name}</span>}</span>
                             </button>
@@ -225,12 +236,16 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
                         </div>
                         <button type="button" onClick={() => removeLine(i)} className="shrink-0 rounded-md p-1.5 text-neutral-400 transition hover:bg-red-50 hover:text-red-600 sm:hidden" title="Satırı sil" aria-label="Satırı sil"><Trash2 className="h-4 w-4" /></button>
                       </div>
-                      {opts.length > 0 && (
-                        <select value={l.variant} onChange={(e) => setLine(i, { variant: e.target.value })} aria-label="Renk / seçenek" className={`input mt-1.5 sm:w-52 ${l.variant ? '' : 'border-amber-300 text-neutral-500'}`}>
-                          <option value="">Renk seçin…</option>
-                          {opts.map((o) => <option key={o} value={o}>{o}</option>)}
-                        </select>
-                      )}
+                      {optionGroups.length > 0 && <div className="mt-2 grid gap-2 sm:grid-cols-2">{optionGroups.map((group) => {
+                        const selected = variantValue(l.variant, group, optionGroups);
+                        return <label key={group.name} className="min-w-0 text-xs text-neutral-500">{group.name}<select value={selected} onChange={(e) => {
+                          const selections = Object.fromEntries(optionGroups.map((item) => [item.name, item === group ? e.target.value : variantValue(l.variant, item, optionGroups)]));
+                          setLine(i, { variant: formatVariant(optionGroups, selections) });
+                        }} aria-label={group.name} className={`input mt-1 ${selected ? '' : 'border-amber-300 text-neutral-500'}`}>
+                          <option value="">{group.name} seçin…</option>
+                          {group.values.map((value) => <option key={value} value={value}>{value}</option>)}
+                        </select></label>;
+                      })}</div>}
                       {l.units_per_package && l.units_per_package > 1 && <p className="mt-1 text-xs text-neutral-500">1 {l.package_name || 'paket'} = {l.units_per_package} {l.unit_name || 'adet'}</p>}
                     </div>
                     <div className="mt-3 grid grid-cols-2 items-end gap-2 sm:grid-cols-[minmax(90px,1fr)_minmax(90px,1fr)_minmax(110px,1fr)_minmax(110px,1fr)_minmax(90px,1fr)_32px] sm:gap-3">

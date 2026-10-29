@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, Search, Tag, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Tag, X, Layers } from 'lucide-react';
 import { api } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import { Modal, ConfirmDialog } from '@/components/Modal';
@@ -9,12 +9,12 @@ import { Field, Empty } from '@/components/ui';
 import { Spinner } from '@/components/Loading';
 import { money } from '@/lib/format';
 import { STANDARD_COLORS } from '@/lib/constants';
-import type { Product } from '@/lib/types';
+import type { Product, ProductOptionGroup } from '@/lib/types';
 
-interface Draft { name: string; unit_price: string; units_per_package: string; unit_name: string; package_name: string; description: string; image: string; desi: string; options: string; active: boolean }
-const EMPTY: Draft = { name: '', unit_price: '', units_per_package: '1', unit_name: 'adet', package_name: 'adet', description: '', image: '', desi: '0', options: '', active: true };
-const toDraft = (p: Product): Draft => ({ name: p.name, unit_price: p.unit_price != null ? String(p.unit_price) : '', units_per_package: String(p.units_per_package || 1), unit_name: p.unit_name || 'adet', package_name: p.package_name || 'adet', description: p.description || '', image: p.image || '', desi: String(p.desi ?? 0), options: (p.options || []).join(', '), active: p.active !== 0 });
-const optionsText = (p: Product) => (p.options || []).join(', ');
+interface Draft { name: string; unit_price: string; units_per_package: string; unit_name: string; package_name: string; description: string; image: string; desi: string; options: ProductOptionGroup[]; active: boolean }
+const EMPTY: Draft = { name: '', unit_price: '', units_per_package: '1', unit_name: 'adet', package_name: 'adet', description: '', image: '', desi: '0', options: [], active: true };
+const toDraft = (p: Product): Draft => ({ name: p.name, unit_price: p.unit_price != null ? String(p.unit_price) : '', units_per_package: String(p.units_per_package || 1), unit_name: p.unit_name || 'adet', package_name: p.package_name || 'adet', description: p.description || '', image: p.image || '', desi: String(p.desi ?? 0), options: p.options || [], active: p.active !== 0 });
+const optionsText = (p: Product) => (p.options || []).map((group) => `${group.name}: ${group.values.join(', ')}`).join(' · ');
 const fmtDesi = (d: number | null | undefined) => (d ? String(d).replace('.', ',') : '0');
 const norm = (s: string | null | undefined) => (s || '').toLocaleLowerCase('tr');
 const byName = (a: Product, b: Product) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'tr');
@@ -39,6 +39,10 @@ export function ProductsClient({ initial }: { initial: Product[] }) {
 
   const save = async () => {
     if (!draft.name.trim()) return toast('Ürün adı gerekli', 'err');
+    const invalidGroup = draft.options.find((group) => !group.name.trim() || !group.values.length);
+    if (invalidGroup) return toast('Her varyasyon özelliğine bir ad ve en az bir değer ekleyin', 'err');
+    const groupNames = draft.options.map((group) => group.name.trim().toLocaleLowerCase('tr'));
+    if (new Set(groupNames).size !== groupNames.length) return toast('Varyasyon özellik adları birbirinden farklı olmalı', 'err');
     setBusy(true);
     const payload = { name: draft.name, unit_price: draft.unit_price.trim() === '' ? null : draft.unit_price, units_per_package: draft.units_per_package, unit_name: draft.unit_name, package_name: draft.package_name, description: draft.description, image: draft.image, desi: draft.desi.trim() === '' ? 0 : draft.desi, options: draft.options, active: draft.active };
     try {
@@ -162,16 +166,44 @@ export function ProductsClient({ initial }: { initial: Product[] }) {
           <Field label="Desi" hint="Kargo hesabı için; şimdilik 0 bırakabilirsiniz."><input value={draft.desi} onChange={(e) => setDraft({ ...draft, desi: e.target.value })} inputMode="decimal" className="input" placeholder="0" /></Field>
           <Field label="Görsel adresi (URL)" hint="Şimdilik boş kalabilir." className="sm:col-span-2"><input value={draft.image} onChange={(e) => setDraft({ ...draft, image: e.target.value })} className="input" placeholder="https://…/urun.jpg" /></Field>
           <Field label="Açıklama" className="sm:col-span-2"><textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} className="input min-h-[60px]" placeholder="Malzeme, ölçü…" /></Field>
-          <Field label="Seçenekler (renk vb.)" hint="Virgülle ayırın. Sipariş formunda bu ürün seçilince satırda seçim kutusu çıkar." className="sm:col-span-2">
-            <div className="flex gap-2">
-              <input value={draft.options} onChange={(e) => setDraft({ ...draft, options: e.target.value })} className="input" placeholder="Kırmızı, Sarı, Mavi…" />
-              <button type="button" onClick={() => setDraft({ ...draft, options: STANDARD_COLORS.join(', ') })} className="btn btn-sm shrink-0" title={STANDARD_COLORS.join(', ')}>9 renk</button>
+          <div className="space-y-2 sm:col-span-2">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div><p className="label mb-0">Ürün varyasyonları</p><p className="mt-1 text-xs text-neutral-500">Renk, beden, ölçü gibi özellikleri gruplar halinde tanımlayın. Siparişte her grup ayrı seçilir.</p></div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { const colors: ProductOptionGroup = { name: 'Renk', values: STANDARD_COLORS }; const exists = draft.options.some((group) => group.name.toLocaleLowerCase('tr') === 'renk'); setDraft({ ...draft, options: exists ? draft.options.map((group) => group.name.toLocaleLowerCase('tr') === 'renk' ? colors : group) : [...draft.options, colors] }); }} className="btn btn-sm">Renk şablonu</button>
+                <button type="button" onClick={() => setDraft({ ...draft, options: [...draft.options, { name: 'Yeni özellik', values: [] }] })} className="btn btn-sm"><Plus className="h-3.5 w-3.5" />Özellik ekle</button>
+              </div>
             </div>
-          </Field>
+            {draft.options.length ? <div className="space-y-2">{draft.options.map((group, index) => <OptionGroupEditor key={index} group={group} onChange={(next) => setDraft({ ...draft, options: draft.options.map((item, i) => i === index ? next : item) })} onRemove={() => setDraft({ ...draft, options: draft.options.filter((_, i) => i !== index) })} />)}</div> : <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50/60 px-4 py-5 text-center"><Layers className="mx-auto h-5 w-5 text-neutral-400" /><p className="mt-1 text-sm font-medium text-neutral-700">Henüz varyasyon eklenmedi</p><p className="mt-0.5 text-xs text-neutral-500">Tek ürün olarak satılıyorsa boş bırakabilirsiniz.</p></div>}
+          </div>
           <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} className="h-4 w-4 rounded border-neutral-300 text-primary" />Aktif (sipariş formunda önerilsin)</label>
         </div>
       </Modal>
       <ConfirmDialog open={Boolean(del)} text={del ? `"${del.name}" silinsin mi? Eski siparişlerdeki satırlar etkilenmez.` : ''} okLabel="Sil" danger busy={busy} onCancel={() => setDel(null)} onConfirm={remove} />
     </>
+  );
+}
+
+function OptionGroupEditor({ group, onChange, onRemove }: { group: ProductOptionGroup; onChange: (group: ProductOptionGroup) => void; onRemove: () => void }) {
+  const [valueDraft, setValueDraft] = useState('');
+  const addValues = (input: string) => {
+    const additions = input.split(/[,\n;]/).map((value) => value.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    if (!additions.length) return;
+    const values = [...group.values];
+    for (const value of additions) if (!values.some((existing) => existing.toLocaleLowerCase('tr') === value.toLocaleLowerCase('tr'))) values.push(value.slice(0, 40));
+    onChange({ ...group, values });
+    setValueDraft('');
+  };
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-3">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1"><label className="label">Özellik adı</label><input value={group.name} onChange={(e) => onChange({ ...group, name: e.target.value })} className="input" placeholder="Örn. Renk, Beden, Ölçü" maxLength={40} /></div>
+        <button type="button" onClick={onRemove} className="mt-5 rounded-md p-2 text-neutral-400 hover:bg-red-50 hover:text-red-600" aria-label={`${group.name} özelliğini kaldır`} title="Özelliği kaldır"><X className="h-4 w-4" /></button>
+      </div>
+      <label className="label mt-3">Değerler</label>
+      {group.values.length > 0 && <div className="mb-2 flex flex-wrap gap-1.5">{group.values.map((value, index) => <span key={`${value}-${index}`} className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-neutral-50 py-1 pl-2.5 pr-1 text-xs text-neutral-700">{value}<button type="button" onClick={() => onChange({ ...group, values: group.values.filter((_, i) => i !== index) })} className="rounded-full p-0.5 text-neutral-400 hover:bg-white hover:text-red-600" aria-label={`${value} değerini kaldır`}><X className="h-3 w-3" /></button></span>)}</div>}
+      <div className="flex gap-2"><input value={valueDraft} onChange={(e) => setValueDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addValues(valueDraft); } }} className="input" placeholder="Değer yazın, Enter ile ekleyin" /><button type="button" onClick={() => addValues(valueDraft)} disabled={!valueDraft.trim()} className="btn btn-sm shrink-0"><Plus className="h-3.5 w-3.5" />Ekle</button></div>
+      <p className="mt-1 text-xs text-neutral-500">Birden fazla değeri virgülle ayırarak da ekleyebilirsiniz.</p>
+    </div>
   );
 }

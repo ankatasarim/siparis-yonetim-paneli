@@ -1,36 +1,64 @@
 import * as db from '../db';
 import { eq, ilike, or, type Where } from '../store';
 import { httpError, now, pick, round2, toNumber } from '../utils';
-import type { Product } from '../types';
+import type { Product, ProductOptionGroup } from '../types';
 
 /**
  * Ürün kataloğu: sipariş formunda satır eklerken buradan seçilir; ad ve fiyat satıra kopyalanır.
- * options (renk vb.) DB'de options_json (JSON dizi) olarak saklanır; doluysa sipariş satırında seçim kutusu çıkar.
+ * options (varyasyon grupları) DB'de options_json olarak saklanır; string listeler eski şemadan uyumluluk için desteklenir.
  */
 
 const FIELDS = ['name', 'price', 'units_per_package', 'unit_price', 'unit_name', 'package_name', 'description', 'image', 'desi', 'options', 'active', 'sort_order'] as const;
-const MAX_OPTIONS = 50;
+const MAX_OPTION_GROUPS = 10;
+const MAX_OPTION_VALUES = 100;
 const validId = (id: number | string) => Number.isInteger(Number(id)) && Number(id) > 0;
 
 /** Baz birim fiyatını satış paketine çevirir; para değerleri kuruş hassasiyetinde tutulur. */
 export const packagePrice = (unitPrice: number, unitsPerPackage: number) => round2(unitPrice * unitsPerPackage);
 
-/** Dizi ya da "Kırmızı, Sarı" gibi virgül/satır ayrılmış metin → temiz, tekrarsız liste. */
-export function parseOptions(input: unknown): string[] {
-  const raw: unknown[] = Array.isArray(input) ? input : String(input ?? '').split(/[,\n;]/);
-  const out: string[] = [];
-  for (const v of raw) {
-    const s = String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
-    if (s && !out.some((x) => x.toLocaleLowerCase('tr') === s.toLocaleLowerCase('tr'))) out.push(s);
-    if (out.length >= MAX_OPTIONS) break;
+/** Eski string listelerini tek bir "Seçenek" grubuna dönüştürür. */
+export function parseProductOptions(input: unknown): ProductOptionGroup[] {
+  const legacyValues = (value: unknown): string[] => {
+    const raw: unknown[] = Array.isArray(value) ? value : String(value ?? '').split(/[,\n;]/);
+    const values: string[] = [];
+    for (const item of raw) {
+      const text = String(item ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+      if (text && !values.some((x) => x.toLocaleLowerCase('tr') === text.toLocaleLowerCase('tr'))) values.push(text);
+      if (values.length >= MAX_OPTION_VALUES) break;
+    }
+    return values;
+  };
+
+  if (typeof input === 'string') {
+    const values = legacyValues(input);
+    return values.length ? [{ name: 'Seçenek', values }] : [];
   }
-  return out;
+  if (!Array.isArray(input) || !input.length) return [];
+  if (input.every((item) => typeof item !== 'object' || item === null || Array.isArray(item))) {
+    const values = legacyValues(input);
+    return values.length ? [{ name: 'Seçenek', values }] : [];
+  }
+
+  const groups: ProductOptionGroup[] = [];
+  let totalValues = 0;
+  for (const raw of input.slice(0, MAX_OPTION_GROUPS)) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const item = raw as Record<string, unknown>;
+    const name = String(item.name ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (!name || groups.some((group) => group.name.toLocaleLowerCase('tr') === name.toLocaleLowerCase('tr'))) continue;
+    const values = legacyValues(item.values).slice(0, Math.max(0, MAX_OPTION_VALUES - totalValues));
+    if (!values.length) continue;
+    groups.push({ name, values });
+    totalValues += values.length;
+    if (totalValues >= MAX_OPTION_VALUES) break;
+  }
+  return groups;
 }
 
 function hydrate<T extends Record<string, unknown>>(row: T | null): Product | null {
   if (!row) return null;
-  let options: string[] = [];
-  try { const v = JSON.parse((row.options_json as string) || '[]'); options = Array.isArray(v) ? v.map(String) : []; } catch { options = []; }
+  let options: ProductOptionGroup[] = [];
+  try { options = parseProductOptions(JSON.parse((row.options_json as string) || '[]')); } catch { options = []; }
   const { options_json: _oj, ...rest } = row;
   const unitsPerPackage = Math.max(1, Number(rest.units_per_package) || 1);
   const packagePriceValue = rest.price == null ? null : Number(rest.price);
@@ -87,7 +115,7 @@ function clean(data: unknown): Record<string, unknown> {
     if (!v) throw httpError(400, 'Satış birimi adı gerekli');
     out.package_name = v;
   }
-  if ('options' in d) out.options_json = JSON.stringify(parseOptions(d.options));
+  if ('options' in d) out.options_json = JSON.stringify(parseProductOptions(d.options));
   if ('active' in d) out.active = d.active === false || d.active === 0 || d.active === '0' ? 0 : 1;
   if ('sort_order' in d) {
     const v = parseInt(String(d.sort_order), 10);
