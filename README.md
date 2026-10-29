@@ -11,7 +11,7 @@ Instagram'dan gelen siparişleri tek panelden yönetmek için hazırlanmış, **
 - **Giriş (panel):** Durum sayaçları, bu ayki ciro, yeni / kargo bekleyen / kargodaki siparişler, dikkat gerektiren işler, son hareketler.
 - **Siparişler:** ikas'taki gibi tablo, arama, durum ve ödeme filtreleri, sayfalama, CSV dışa aktarma. Durum rozetine tıklayınca detaya girmeden durum değiştirilir (kargoya verirken takip numarası sorulur).
 - **Sipariş detayı:** Siyah üst barlı tam ekran sayfa; ürün tablosu, müşteri ve sevkiyat adresi, zaman çizelgesi + iç yorumlar, sağda sipariş özeti, ödeme, durum işlemleri, memnuniyet ve bildirimler.
-- **Ürünler:** Sık satılan ürünlerin kataloğu (ad, fiyat, açıklama, görsel adresi, desi, aktif/pasif). Sipariş formunda ürün alanına tıklayınca listelenir; seçince ad ve fiyat satıra dolar.
+- **Ürünler:** Sık satılan ürün kataloğu (birim fiyatı, paketteki birim sayısı, ölçü birimleri, açıklama, görsel, desi). Örneğin 25 adetlik paketin adet fiyatı girilir; paket satış fiyatı otomatik hesaplanır ve sipariş satırında paket bilgisi sabitlenir.
 - **Sipariş oluşturma:** Ürün satırları (katalogdan seçilebilir), kayıtlı müşteri arama veya yeni müşteri, etiket / kişiselleştirme notu, ödeme durumu ve yöntemi, kargo ücreti, desi, parça, kargo ödeyen.
 - **DHL kargo:** Manuel mod (Online Şube + takip numarası, hemen kullanılabilir), **toplu gönderi Excel'i** (Siparişler › "DHL Excel": seçilen siparişler DHL'nin aktarım şablonuna yazılır, Online Şube › Toplu Gönderi Aktarımı'na yüklenir), API modu (şubeden gelen bilgilerle), Unified Tracking API ile teslimat sorgusu (elle tetiklenir).
 - **Gelen Kutusu:** "Instagram'dan çek" düğmesi son DM'leri getirir ve listeler; panelden cevap yazılır, mesajdan tek tıkla sipariş oluşturulur.
@@ -37,7 +37,7 @@ Geliştirme için `npm run dev`. Testler: `npm test` (bellek içi depo, internet
 
 ### 1) Supabase: tablolar ve anahtar
 1. https://supabase.com → projeniz (bölge Avrupa önerilir).
-2. **SQL Editor › New query** → [supabase/schema.sql](supabase/schema.sql) dosyasının tamamını yapıştırın → **Run**. Tablolar, güvenlik kuralları (RLS) ve yedek kovası oluşur. Bir kez yapılır. Şemayı daha önce kurduysanız ürün kataloğu için [supabase/urunler.sql](supabase/urunler.sql) dosyasını aynı şekilde çalıştırın.
+2. **SQL Editor › New query** → [supabase/schema.sql](supabase/schema.sql) dosyasının tamamını yapıştırın → **Run**. Tablolar, güvenlik kuralları (RLS) ve yedek kovası oluşur. Şema değişiklikleri `IF NOT EXISTS` ile güvenli olduğundan, mevcut kurulumu yeni alanlara geçirmek için de bu dosyayı yeniden çalıştırabilirsiniz.
 3. **Project Settings › Data API › Project URL** = `SUPABASE_URL`. Anahtar için iki seçenek:
    - **Publishable anahtar** (`sb_publishable_...`, Project Settings › API Keys) → `SUPABASE_PUBLISHABLE_KEY`. `schema.sql` bu anahtara tablo erişimi verir. Anahtar herkese açık sayıldığından proje klasörünü paylaşırken `.env` dosyasını dışarıda tutun.
    - **Gizli anahtar** (`sb_secret_...`, Secret keys sekmesi) → `SUPABASE_SECRET_KEY`. Daha güvenli; girildiğinde publishable anahtar kullanılmaz ve `schema.sql` içindeki `anka_anon_*` politikalarını silebilirsiniz.

@@ -13,10 +13,10 @@ const HAS_ID = new Set<Table>(['customers', 'products', 'orders', 'messages', 'o
 /** Veritabanındaki sütun varsayılanları: eksik alanlar undefined yerine bu değerlerle doldurulur. */
 const DEFAULTS: Record<Table, Row> = {
   customers: { ig_user_id: null, ig_username: null, name: '', email: '', phone: '', address: '', city: '', district: '', postal_code: '', notes: '', profile_pic: null },
-  products: { price: null, description: '', image: '', desi: 0, options_json: '[]', active: 1, sort_order: 0 },
+  products: { price: null, units_per_package: 1, unit_price: null, unit_name: 'adet', package_name: 'adet', description: '', image: '', desi: 0, options_json: '[]', active: 1, sort_order: 0 },
   orders: {
     status: 'yeni', payment_status: 'bekleniyor', payment_method: '', shipping_payer: 'gonderici', lines_json: '[]', items: '', notes: '', labels: '', desi: null,
-    package_count: 1, shipping_fee: 0, subtotal: 0, total: 0, source: 'instagram', shipping_company: null, shipping_tracking_no: null, dhl_tracking_no: null, dhl_shipment_ref: null, dhl_status: null, dhl_status_text: null,
+    package_count: 1, tax_rate: 0, shipping_fee: 0, subtotal: 0, total: 0, source: 'instagram', shipping_company: null, shipping_tracking_no: null, dhl_tracking_no: null, dhl_shipment_ref: null, dhl_status: null, dhl_status_text: null,
     dhl_last_check: null, shipped_at: null, delivered_at: null, closed_at: null, satisfaction: null, satisfaction_note: null, satisfaction_asked_at: null,
   },
   messages: { order_id: null, channel: 'instagram', ig_mid: null, text: '', attachments: '[]', status: 'ok', error: null, kind: null, is_read: 0 },

@@ -25,7 +25,7 @@ async function fire(kind: keyof Hooks, payload: unknown) {
   }
 }
 
-const EDITABLE = ['lines', 'notes', 'labels', 'desi', 'package_count', 'shipping_payer', 'shipping_fee', 'payment_status', 'payment_method', 'source'] as const;
+const EDITABLE = ['lines', 'notes', 'labels', 'desi', 'package_count', 'tax_rate', 'shipping_payer', 'shipping_fee', 'payment_status', 'payment_method', 'source'] as const;
 const validId = (id: number | string) => Number.isInteger(Number(id)) && Number(id) > 0;
 const S = () => db.store();
 
@@ -42,11 +42,21 @@ export function normalizeLines(input: unknown): OrderLine[] {
     if (!raw) continue;
     const name = String(raw.name || '').trim();
     if (!name) continue;
-    const qty = Math.max(1, parseInt(String(raw.qty ?? 1), 10) || 1);
+    const rawQty = toNumber(raw.qty ?? 1);
+    if (rawQty == null || Number.isNaN(rawQty) || rawQty <= 0 || rawQty > 1000000) throw httpError(400, `"${name}" için miktar geçersiz`);
+    const qty = Number(rawQty.toFixed(4));
     const price = toNumber(raw.price);
     if (price != null && (Number.isNaN(price) || price < 0)) throw httpError(400, `"${name}" için fiyat geçersiz`);
+    const unitsPerPackage = Number(raw.units_per_package ?? 1);
+    if (!Number.isInteger(unitsPerPackage) || unitsPerPackage < 1 || unitsPerPackage > 100000) throw httpError(400, `"${name}" için paket içi birim adedi geçersiz`);
+    const unitPrice = toNumber(raw.unit_price);
+    if (unitPrice != null && (Number.isNaN(unitPrice) || unitPrice < 0)) throw httpError(400, `"${name}" için birim fiyat geçersiz`);
     const pid = Number(raw.product_id);
     const line: OrderLine = Number.isInteger(pid) && pid > 0 ? { name, qty, price, product_id: pid } : { name, qty, price };
+    line.units_per_package = unitsPerPackage;
+    line.unit_name = String(raw.unit_name || 'adet').replace(/\s+/g, ' ').trim().slice(0, 24) || 'adet';
+    line.package_name = String(raw.package_name || (unitsPerPackage > 1 ? 'paket' : 'adet')).replace(/\s+/g, ' ').trim().slice(0, 24) || 'adet';
+    line.unit_price = unitPrice == null ? null : round2(unitPrice);
     const variant = String(raw.variant ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
     if (variant) line.variant = variant;
     out.push(line);
@@ -54,11 +64,18 @@ export function normalizeLines(input: unknown): OrderLine[] {
   return out;
 }
 
-export const linesSummary = (lines: OrderLine[]) => lines.map((l) => `${l.qty}× ${l.name}${l.variant ? ` (${l.variant})` : ''}`).join(', ');
+export const linesSummary = (lines: OrderLine[]) => lines.map((l) => {
+  const packageName = l.package_name || 'adet';
+  const unitsPerPackage = l.units_per_package || 1;
+  const packageDetails = unitsPerPackage > 1 ? ` (${l.qty * unitsPerPackage} ${l.unit_name || 'adet'})` : '';
+  return `${l.qty} ${packageName}${packageDetails} ${l.name}${l.variant ? ` (${l.variant})` : ''}`;
+}).join(', ');
 
-export function calcTotals(lines: OrderLine[], shippingFee: number) {
+export function calcTotals(lines: OrderLine[], shippingFee: number, taxRate = 0) {
   const subtotal = round2(lines.reduce((s, l) => s + l.qty * (l.price || 0), 0));
-  return { subtotal, total: round2(subtotal + (shippingFee || 0)) };
+  const rate = Math.max(0, Math.min(100, Number(taxRate) || 0));
+  const tax = round2(subtotal * (rate / 100));
+  return { subtotal, tax, total: round2(subtotal + tax + (shippingFee || 0)) };
 }
 
 function cleanFields(data: unknown): Record<string, unknown> {
@@ -85,6 +102,11 @@ function cleanFields(data: unknown): Record<string, unknown> {
     const v = parseInt(String(d.package_count), 10);
     out.package_count = Number.isFinite(v) && v > 0 ? v : 1;
   }
+  if ('tax_rate' in d) {
+    const v = toNumber(d.tax_rate);
+    if (v != null && (Number.isNaN(v) || v < 0 || v > 100)) throw httpError(400, 'KDV oranı geçersiz');
+    out.tax_rate = v || 0;
+  }
   if ('shipping_fee' in d) {
     const v = toNumber(d.shipping_fee);
     if (v != null && (Number.isNaN(v) || v < 0)) throw httpError(400, 'Kargo ücreti geçersiz');
@@ -107,7 +129,7 @@ function hydrate<T extends Record<string, unknown>>(row: T | null): (Omit<T, 'li
   let lines: OrderLine[] = [];
   try { lines = JSON.parse((row.lines_json as string) || '[]'); } catch { lines = []; }
   const { lines_json: _lj, ...rest } = row;
-  const normalized: Record<string, unknown> = { ...rest };
+  const normalized: Record<string, unknown> = { ...rest, tax_rate: Number(rest.tax_rate ?? 0) || 0 };
   // Eski yerel yedeklerde de kapandı kayıtlarını teslim edildi olarak göster.
   if (normalized.status === 'kapandi') normalized.status = 'teslim_edildi';
   if (!normalized.shipping_company && normalized.dhl_tracking_no) normalized.shipping_company = 'dhl';
@@ -253,7 +275,8 @@ export async function create(data: Record<string, unknown>): Promise<OrderFull> 
   }
   const lines = JSON.parse(f.lines_json as string) as OrderLine[];
   if (!lines.length) throw httpError(400, 'En az bir ürün satırı girin');
-  const { subtotal, total } = calcTotals(lines, Number(f.shipping_fee) || 0);
+  const taxRate = Number(f.tax_rate) || 0;
+  const { subtotal, total } = calcTotals(lines, Number(f.shipping_fee) || 0, taxRate);
   if (f.payment_method === ACCOUNT_PAYMENT_METHOD && total <= 0) throw httpError(400, 'Cari hesaba kaydedilecek sipariş tutarı sıfırdan büyük olmalıdır');
   const t = now();
   let id = 0;
@@ -263,7 +286,7 @@ export async function create(data: Record<string, unknown>): Promise<OrderFull> 
       const row = await S().insert<{ id: number }>('orders', {
         order_no, customer_id: customer.id, status: 'yeni', payment_status: f.payment_status, payment_method: f.payment_method, shipping_payer: f.shipping_payer,
         lines_json: f.lines_json, items: f.items, notes: f.notes, labels: f.labels, desi: f.desi, package_count: f.package_count,
-        shipping_fee: f.shipping_fee, subtotal, total, source: f.source, created_at: t, updated_at: t,
+        tax_rate: Number(f.tax_rate) || 0, shipping_fee: f.shipping_fee, subtotal, total, source: f.source, created_at: t, updated_at: t,
       });
       id = row.id;
       break;
@@ -314,8 +337,10 @@ export async function update(id: number | string, data: unknown): Promise<OrderF
   const lines = 'lines_json' in f ? (JSON.parse(f.lines_json as string) as OrderLine[]) : existing.lines;
   if (!lines.length) throw httpError(400, 'En az bir ürün satırı girin');
   const shippingFee = 'shipping_fee' in f ? Number(f.shipping_fee) : existing.shipping_fee;
-  const { subtotal, total } = calcTotals(lines, shippingFee);
+  const taxRate = 'tax_rate' in f ? Number(f.tax_rate) : Number(existing.tax_rate ?? 0);
+  const { subtotal, total } = calcTotals(lines, shippingFee, taxRate);
   if (requestedMethod === ACCOUNT_PAYMENT_METHOD && total <= 0) throw httpError(400, 'Cari hesaba kaydedilecek sipariş tutarı sıfırdan büyük olmalıdır');
+  f.tax_rate = taxRate;
   f.subtotal = subtotal;
   f.total = total;
   if ('payment_status' in f && f.payment_status !== existing.payment_status) {
@@ -347,9 +372,6 @@ export async function setStatus(id: number | string, status: OrderStatus, opts: 
   const from = STATUSES[order.status];
   if (!opts.force && !from.next.includes(status)) {
     throw httpError(400, `"${from.label}" durumundan "${STATUSES[status].label}" durumuna geçilemez`);
-  }
-  if (status === 'kargoya_verildi' && !order.shipping_company && !opts.force) {
-    throw httpError(400, 'Kargoya verildi olarak işaretlemek için kargo şirketi seçilmeli');
   }
   const t = now();
   const patch: Record<string, unknown> = { status, updated_at: t };

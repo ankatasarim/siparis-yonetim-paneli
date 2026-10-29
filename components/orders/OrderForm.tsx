@@ -12,15 +12,18 @@ import { PAYMENT_STATUSES, SHIPPING_PAYERS, PAYMENT_METHODS, ACCOUNT_PAYMENT_MET
 import { money } from '@/lib/format';
 import type { Customer, CustomerRow, OrderFull, OrderLine, OrderSource, PaymentStatus, Product, ShippingPayer } from '@/lib/types';
 
-interface LineDraft { name: string; qty: string; price: string; product_id?: number | null; variant: string }
-const toDraft = (l: OrderLine): LineDraft => ({ name: l.name, qty: String(l.qty), price: fmtPrice(l.price), product_id: l.product_id ?? null, variant: l.variant || '' });
-const emptyLine = (name = ''): LineDraft => ({ name, qty: '1', price: '', product_id: null, variant: '' });
+interface LineDraft { name: string; qty: string; unit_qty: string; price: string; product_id?: number | null; variant: string; units_per_package?: number; unit_name?: string; package_name?: string; unit_price: string }
+const toDraft = (l: OrderLine): LineDraft => {
+  const unitsPerPackage = l.units_per_package || 1;
+  const unitPrice = l.unit_price ?? (l.price != null ? l.price / unitsPerPackage : null);
+  return { name: l.name, qty: fmtQty(l.qty), unit_qty: fmtQty(l.qty * unitsPerPackage), price: fmtPrice(l.price), product_id: l.product_id ?? null, variant: l.variant || '', units_per_package: unitsPerPackage, unit_name: l.unit_name || 'adet', package_name: l.package_name || 'adet', unit_price: fmtPrice(unitPrice) };
+};
+const emptyLine = (name = ''): LineDraft => ({ name, qty: '1', unit_qty: '1', price: '', product_id: null, variant: '', units_per_package: 1, unit_name: 'adet', package_name: 'adet', unit_price: '' });
 const norm = (s: string | null | undefined) => (s || '').toLocaleLowerCase('tr');
 const num = (v: string) => { const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; };
-/** Ürün satırı sütunları (sm ve üstü): ürün · adet · birim fiyat · toplam · sil */
-const GRID = 'sm:grid-cols-[minmax(0,1fr)_108px_124px_96px_32px] sm:gap-3';
 /** Fiyatı Türkçe ondalık ayraçla gösterir (62.5 → 62,5); num() geri çevirir. */
 const fmtPrice = (n: number | null | undefined) => (n != null ? String(n).replace('.', ',') : '');
+const fmtQty = (n: number) => String(Number(n.toFixed(4))).replace('.', ',');
 
 export function OrderForm({ order, customer, prefillText }: { order?: OrderFull; customer?: Customer | null; prefillText?: string }) {
   const router = useRouter();
@@ -33,7 +36,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
   const [cust, setCust] = useState({ name: c0?.name || '', email: c0?.email || '', phone: c0?.phone || '', address: c0?.address || '', city: c0?.city || '', district: c0?.district || '', postal_code: c0?.postal_code || '', ig_username: c0?.ig_username || '' });
   const [igLinked, setIgLinked] = useState(Boolean(c0?.ig_user_id));
   const [f, setF] = useState({
-    notes: order?.notes || '', labels: order?.labels || '', desi: order?.desi != null ? String(order.desi) : '', package_count: String(order?.package_count || 1),
+    notes: order?.notes || '', labels: order?.labels || '', desi: order?.desi != null ? String(order.desi) : '', package_count: String(order?.package_count || 1), tax_rate: String(order?.tax_rate ?? 0),
     shipping_payer: (order?.shipping_payer || 'gonderici') as ShippingPayer, shipping_fee: String(order?.shipping_fee || 0),
     payment_status: (order?.payment_status || 'bekleniyor') as PaymentStatus, payment_method: order?.payment_method || '',
     source: (order?.source && order.source in ORDER_SOURCES ? order.source : DEFAULT_SOURCE) as OrderSource,
@@ -74,12 +77,35 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
   };
 
   const subtotal = lines.reduce((s, l) => s + num(l.qty) * num(l.price), 0);
-  const total = subtotal + num(f.shipping_fee);
+  const taxRate = num(f.tax_rate);
+  const tax = subtotal * (taxRate / 100);
+  const total = subtotal + tax + num(f.shipping_fee);
   const setLine = (i: number, patch: Partial<LineDraft>) => setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const removeLine = (i: number) => setLines(lines.length > 1 ? lines.filter((_, j) => j !== i) : [emptyLine()]);
   const addLine = () => { setLines([...lines, emptyLine()]); setFocusIdx(lines.length); };
-  const stepQty = (i: number, d: number) => setLine(i, { qty: String(Math.max(1, (parseInt(lines[i].qty, 10) || 1) + d)) });
+  const stepQty = (i: number, d: number) => setPackageQty(i, String(Math.max(1, (parseInt(lines[i].qty, 10) || 1) + d)));
   const lineCount = lines.reduce((sum, l) => sum + (l.name.trim() ? num(l.qty) || 1 : 0), 0);
+  const unitCount = lines.reduce((sum, l) => sum + (l.name.trim() ? num(l.unit_qty) || 0 : 0), 0);
+  const setPackageQty = (i: number, value: string) => {
+    const size = lines[i].units_per_package || 1;
+    const qty = Number(value.replace(',', '.'));
+    setLine(i, { qty: value, unit_qty: value.trim() && Number.isFinite(qty) ? fmtQty(qty * size) : '' });
+  };
+  const setUnitQty = (i: number, value: string) => {
+    const size = lines[i].units_per_package || 1;
+    const qty = Number(value.replace(',', '.'));
+    setLine(i, { unit_qty: value, qty: value.trim() && Number.isFinite(qty) ? fmtQty(qty / size) : '' });
+  };
+  const setUnitPrice = (i: number, value: string) => {
+    const size = lines[i].units_per_package || 1;
+    const price = Number(value.replace(',', '.'));
+    setLine(i, { unit_price: value, price: !value.trim() ? '' : Number.isFinite(price) ? fmtPrice(Math.round(price * size * 100) / 100) : lines[i].price });
+  };
+  const setPackagePrice = (i: number, value: string) => {
+    const size = lines[i].units_per_package || 1;
+    const price = Number(value.replace(',', '.'));
+    setLine(i, { price: value, unit_price: !value.trim() ? '' : Number.isFinite(price) ? fmtPrice(Number((price / size).toFixed(4))) : lines[i].unit_price });
+  };
   // Satırın ürününde seçenek (renk vb.) tanımlıysa listesi; kayıtlı ama listede olmayan eski seçenek de gösterilir.
   const optionsFor = (l: LineDraft): string[] => {
     const p = l.product_id ? products.find((x) => x.id === l.product_id) : null;
@@ -88,7 +114,12 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
     return l.variant && !opts.includes(l.variant) ? [l.variant, ...opts] : opts;
   };
   const suggestionsFor = (text: string) => { const t = norm(text.trim()); return (t ? products.filter((p) => norm(p.name).includes(t) || norm(p.description).includes(t)) : products).slice(0, 8); };
-  const pickProduct = (i: number, p: Product) => { setLine(i, { name: p.name, price: fmtPrice(p.price), product_id: p.id, variant: '' }); setOpenSug(null); };
+  const pickProduct = (i: number, p: Product) => {
+    const size = p.units_per_package || 1;
+    const qty = num(lines[i].qty) || 1;
+    setLine(i, { name: p.name, qty: fmtQty(qty), unit_qty: fmtQty(qty * size), price: fmtPrice(p.price), product_id: p.id, variant: '', units_per_package: size, unit_name: p.unit_name || 'adet', package_name: p.package_name || 'adet', unit_price: fmtPrice(p.unit_price) });
+    setOpenSug(null);
+  };
 
   const submit = async () => {
     const validLines = lines.filter((l) => l.name.trim());
@@ -98,8 +129,8 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
     if (!cust.name.trim() && !custId) return toast('Müşteri adı gerekli', 'err');
     setBusy(true);
     const payload = {
-      customer: cust, lines: validLines.map((l) => ({ name: l.name.trim(), qty: num(l.qty) || 1, price: l.price.trim() === '' ? null : num(l.price), product_id: l.product_id ?? null, variant: l.variant.trim() || null })),
-      notes: f.notes, labels: f.labels, desi: f.desi, package_count: f.package_count, shipping_payer: f.shipping_payer, shipping_fee: f.shipping_fee,
+      customer: cust, lines: validLines.map((l) => ({ name: l.name.trim(), qty: num(l.qty) || 1, price: l.price.trim() === '' ? null : num(l.price), product_id: l.product_id ?? null, variant: l.variant.trim() || null, units_per_package: l.units_per_package || 1, unit_name: l.unit_name || 'adet', package_name: l.package_name || 'adet', unit_price: l.unit_price.trim() === '' ? null : num(l.unit_price) })),
+      notes: f.notes, labels: f.labels, desi: f.desi, package_count: f.package_count, tax_rate: num(f.tax_rate), shipping_payer: f.shipping_payer, shipping_fee: f.shipping_fee,
       payment_status: f.payment_status, payment_method: f.payment_method, source: f.source,
     };
     try {
@@ -163,21 +194,18 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
           </Card>
 
           <Card title="Ürünler" pad={false} actions={<span className="text-xs text-neutral-500">{products.length ? `${products.length} tanımlı ürün` : 'Tanımlı ürün yok'} · <Link href="/urunler" className="text-primary-text hover:underline">Ürünleri yönet</Link></span>}>
-            {/* Sütun başlıkları bir kez (sm ve üstü); mobilde her satır: ürün üstte, adet · fiyat · toplam altta tek sırada. */}
-            <div className={`hidden border-b border-neutral-100 bg-neutral-50/70 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-neutral-500 sm:grid ${GRID}`}>
-              <span>Ürün</span><span className="text-center">Adet</span><span className="text-right">Birim fiyat</span><span className="text-right">Toplam</span><span />
-            </div>
+            <div className="hidden border-b border-neutral-100 bg-neutral-50/70 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-neutral-500 sm:block">Ürün ve paket tanımı</div>
             <div className="divide-y divide-neutral-100">
               {lines.map((l, i) => {
                 const opts = optionsFor(l);
                 const sugs = openSug === i ? suggestionsFor(l.name) : [];
                 return (
-                  <div key={i} className={`px-4 py-3 sm:grid sm:items-center ${GRID}`}>
+                  <div key={i} className="px-4 py-3">
                     {/* Ürün adı (+ katalog önerileri) ve varsa renk / seçenek */}
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <div className="relative min-w-0 flex-1">
-                          <input value={l.name} onChange={(e) => { setLine(i, { name: e.target.value, product_id: null, variant: '' }); setOpenSug(i); }} onFocus={() => setOpenSug(i)} onBlur={() => setTimeout(() => setOpenSug((v) => (v === i ? null : v)), 150)}
+                          <input value={l.name} onChange={(e) => { setLine(i, { name: e.target.value, product_id: null, variant: '', units_per_package: 1, unit_name: 'adet', package_name: 'adet', unit_price: '', unit_qty: l.qty }); setOpenSug(i); }} onFocus={() => setOpenSug(i)} onBlur={() => setTimeout(() => setOpenSug((v) => (v === i ? null : v)), 150)}
                             placeholder={products.length ? 'Ürün adı yazın veya listeden seçin' : 'Örn: İsimli kolye (gümüş)'} className={`input ${l.product_id ? 'pr-8' : ''}`} autoComplete="off" autoFocus={i === focusIdx} />
                           {l.product_id != null && <Check className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-500" aria-label="Katalogdan seçildi" />}
                           {sugs.length > 0 && (
@@ -189,7 +217,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
                                 <span className="block truncate font-medium">{p.name}</span>
                                 {p.options && p.options.length > 0 ? <span className="block truncate text-xs text-primary-text">{p.options.length} seçenek · {p.options.join(', ')}</span> : p.description ? <span className="block truncate text-xs text-neutral-500">{p.description}</span> : null}
                               </span>
-                              <span className="shrink-0 font-medium text-neutral-700">{p.price != null ? money(p.price) : '—'}</span>
+                              <span className="shrink-0 text-right font-medium text-neutral-700">{p.price != null ? money(p.price) : '—'}{p.units_per_package > 1 && <span className="block text-[10px] font-normal text-neutral-500">{p.unit_price != null ? `${money(p.unit_price)} / ${p.unit_name}` : ''} · {p.units_per_package} {p.unit_name}/{p.package_name}</span>}</span>
                             </button>
                           ))}
                             </div>
@@ -203,19 +231,26 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
                           {opts.map((o) => <option key={o} value={o}>{o}</option>)}
                         </select>
                       )}
+                      {l.units_per_package && l.units_per_package > 1 && <p className="mt-1 text-xs text-neutral-500">1 {l.package_name || 'paket'} = {l.units_per_package} {l.unit_name || 'adet'}</p>}
                     </div>
-                    {/* Adet · birim fiyat · toplam · sil — mobilde tek sıra, sm ve üstünde ızgara hücreleri (sm:contents) */}
-                    <div className="mt-2 flex items-center gap-2 sm:contents">
-                      <div className="flex shrink-0 items-stretch overflow-hidden rounded-md border border-neutral-300 bg-white sm:justify-self-center">
-                        <button type="button" onClick={() => stepQty(i, -1)} className="px-2 text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900" aria-label="Azalt"><Minus className="h-3.5 w-3.5" /></button>
-                        <input value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} inputMode="numeric" aria-label="Adet" className="w-11 border-x border-neutral-300 py-2 text-center text-sm tabular-nums outline-none focus:bg-primary/5" />
-                        <button type="button" onClick={() => stepQty(i, 1)} className="px-2 text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900" aria-label="Artır"><Plus className="h-3.5 w-3.5" /></button>
-                      </div>
-                      <div className="relative min-w-0 flex-1 sm:flex-none">
-                        <input value={l.price} onChange={(e) => setLine(i, { price: e.target.value })} inputMode="decimal" placeholder="Birim fiyat" aria-label="Birim fiyat" className="input pr-7 text-right tabular-nums" />
-                        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-neutral-400">₺</span>
-                      </div>
-                      <div className="ml-auto shrink-0 text-right text-sm font-semibold tabular-nums sm:ml-0">{money(num(l.qty) * num(l.price))}</div>
+                    <div className="mt-3 grid grid-cols-2 items-end gap-2 sm:grid-cols-[minmax(90px,1fr)_minmax(90px,1fr)_minmax(110px,1fr)_minmax(110px,1fr)_minmax(90px,1fr)_32px] sm:gap-3">
+                      <label className="min-w-0 text-xs text-neutral-500">Paket adedi
+                        <div className="mt-1 flex items-stretch overflow-hidden rounded-md border border-neutral-300 bg-white">
+                          <button type="button" onClick={() => stepQty(i, -1)} className="px-2 text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900" aria-label="Paket azalt"><Minus className="h-3.5 w-3.5" /></button>
+                          <input value={l.qty} onChange={(e) => setPackageQty(i, e.target.value)} inputMode="decimal" aria-label={l.package_name || 'Paket adedi'} className="min-w-0 w-full border-x border-neutral-300 py-2 text-center text-sm tabular-nums outline-none focus:bg-primary/5" />
+                          <button type="button" onClick={() => stepQty(i, 1)} className="px-2 text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900" aria-label="Paket artır"><Plus className="h-3.5 w-3.5" /></button>
+                        </div>
+                      </label>
+                      <label className="min-w-0 text-xs text-neutral-500">Toplam {l.unit_name || 'adet'}
+                        <input value={l.unit_qty} onChange={(e) => setUnitQty(i, e.target.value)} inputMode="numeric" aria-label={`Toplam ${l.unit_name || 'adet'}`} className="input mt-1 text-right tabular-nums" />
+                      </label>
+                      <label className="min-w-0 text-xs text-neutral-500">Birim fiyatı
+                        <div className="relative mt-1"><input value={l.unit_price} onChange={(e) => setUnitPrice(i, e.target.value)} inputMode="decimal" placeholder="0,00" aria-label={`${l.unit_name || 'Birim'} fiyatı`} className="input pr-7 text-right tabular-nums" /><span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-neutral-400">₺</span></div>
+                      </label>
+                      <label className="min-w-0 text-xs text-neutral-500">Paket fiyatı
+                        <div className="relative mt-1"><input value={l.price} onChange={(e) => setPackagePrice(i, e.target.value)} inputMode="decimal" placeholder="0,00" aria-label="Paket fiyatı" className="input pr-7 text-right tabular-nums" /><span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-neutral-400">₺</span></div>
+                      </label>
+                      <div className="col-span-2 flex items-center justify-between border-t border-neutral-100 pt-2 text-xs text-neutral-500 sm:col-span-1 sm:block sm:border-0 sm:pt-0 sm:text-right">Satır toplamı <span className="ml-2 text-sm font-semibold tabular-nums text-neutral-900 sm:mt-1 sm:block">{money(num(l.qty) * num(l.price))}</span></div>
                       <button type="button" onClick={() => removeLine(i)} className="hidden shrink-0 rounded-md p-1.5 text-neutral-400 transition hover:bg-red-50 hover:text-red-600 sm:block" title="Satırı sil" aria-label="Satırı sil"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </div>
@@ -224,7 +259,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 bg-neutral-50/40 px-4 py-3">
               <button type="button" onClick={addLine} className="btn btn-sm"><Plus className="h-3.5 w-3.5" />Ürün ekle</button>
-              <p className="text-sm text-neutral-600">{lineCount} ürün · Ara toplam <span className="ml-1 font-semibold text-neutral-900">{money(subtotal)}</span></p>
+              <p className="text-right text-sm text-neutral-600">{fmtQty(lineCount)} satış birimi · {fmtQty(unitCount)} adet · Ara toplam <span className="ml-1 font-semibold text-neutral-900">{money(subtotal)}</span></p>
             </div>
           </Card>
 
@@ -244,7 +279,9 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
           <Card title="Özet">
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between text-neutral-600"><dt>Ara Toplam</dt><dd>{money(subtotal)}</dd></div>
+              <div className="flex items-center justify-between gap-2 text-neutral-600"><dt>KDV</dt><dd className="flex items-center gap-2"><input value={f.tax_rate} onChange={(e) => setF({ ...f, tax_rate: e.target.value })} inputMode="decimal" className="input w-20 py-1 text-right" /><span>%</span></dd></div>
               <div className="flex items-center justify-between text-neutral-600"><dt>Kargo ücreti</dt><dd><input value={f.shipping_fee} onChange={(e) => setF({ ...f, shipping_fee: e.target.value })} inputMode="decimal" className="input w-28 py-1 text-right" /></dd></div>
+              <div className="flex justify-between text-neutral-600"><dt>KDV tutarı</dt><dd>{money(tax)}</dd></div>
               <div className="flex justify-between border-t border-neutral-100 pt-2 text-base font-semibold"><dt>Toplam</dt><dd>{money(total)}</dd></div>
             </dl>
           </Card>

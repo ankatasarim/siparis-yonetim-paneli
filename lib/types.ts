@@ -15,12 +15,23 @@ export interface OrderLine {
   product_id?: number | null;
   /** Seçilen ürün seçeneği (renk vb.); ürünün options listesinden gelir. */
   variant?: string | null;
+  /** Sipariş anındaki paket ve baz birim bilgisi; katalog değişikliklerinden etkilenmez. */
+  units_per_package?: number;
+  unit_name?: string;
+  package_name?: string;
+  unit_price?: number | null;
 }
 
 export interface Product {
   id: number;
   name: string;
+  /** Sipariş satırındaki price, satış paketi fiyatıdır; eski kayıtlarda da aynı anlam korunur. */
   price: number | null;
+  /** Bir paket içindeki baz birim adedi ve bir baz birimin fiyatı. */
+  units_per_package: number;
+  unit_price: number | null;
+  unit_name: string;
+  package_name: string;
   description: string;
   /** Görsel adresi (URL); şimdilik boş olabilir */
   image: string;
@@ -73,6 +84,7 @@ export interface Order {
   labels: string;
   desi: number | null;
   package_count: number;
+  tax_rate: number;
   shipping_fee: number;
   subtotal: number;
   total: number;

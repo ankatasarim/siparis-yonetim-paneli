@@ -1,29 +1,15 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Instagram, MessageCircle, Pencil, Truck, User } from 'lucide-react';
-import { ready, orders, messaging, dhl, instagram } from '@/lib/services';
+import { ready, orders, messaging, instagram } from '@/lib/services';
 import { cfg } from '@/lib/config';
 import { FullscreenHeader } from '@/components/FullscreenHeader';
 import { StatusPill, PaymentPill, SourcePill } from '@/components/Pills';
 import { Card } from '@/components/ui';
 import { ShipmentCard, StatusActions, PaymentCard, SatisfactionCard, NotificationsCard, Timeline, OrderActionsMenu } from '@/components/orders/detail';
-import { STATUSES, SHIPPING_PAYERS, SHIPPING_COMPANIES, ONLINE_SUBE_URL } from '@/lib/constants';
+import { STATUSES, SHIPPING_PAYERS } from '@/lib/constants';
 import { money, fmtDate } from '@/lib/format';
 import type { OrderFull } from '@/lib/types';
-
-function copyBlock(o: OrderFull): string {
-  const c = o.customer;
-  return [
-    `Alıcı: ${c.name || ''}`,
-    `Telefon: ${c.phone || ''}`,
-    `Adres: ${c.address || ''}${c.district || c.city ? ' · ' + [c.district, c.city].filter(Boolean).join(' / ') : ''}${c.postal_code ? ' ' + c.postal_code : ''}`,
-    `Desi: ${o.desi != null ? o.desi : '-'} · Parça: ${o.package_count || 1}`,
-    `Kargo ödemesi: ${SHIPPING_PAYERS[o.shipping_payer]}${o.payment_status === 'kapida_odeme' ? ` · KAPIDA ÖDEME (tahsilat ${money(o.total)})` : ''}`,
-    `Referans: #${o.order_no}`,
-    o.items ? `İçerik: ${o.items}` : null,
-    o.labels ? `Etiket notu: ${o.labels}` : null,
-  ].filter(Boolean).join('\n');
-}
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -82,12 +68,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <Card pad={false} title={<><StatusPill status={o.status} /><span className="hidden sm:inline">{STATUSES[o.status].label}</span> <span className="font-normal text-neutral-500">({count} ürün)</span></>} actions={<Link href={`/siparisler/${o.id}/duzenle`} className="btn btn-sm"><Pencil className="h-3.5 w-3.5" />Ürünleri düzenle</Link>}>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead><tr><th className="th">Ürün</th><th className="th w-14 text-right sm:w-20">Adet</th><th className="th w-24 text-right sm:w-28">Fiyat</th><th className="th w-24 text-right sm:w-32">Toplam</th></tr></thead>
+                <thead><tr><th className="th">Ürün</th><th className="th w-20 text-right sm:w-24">Miktar</th><th className="th w-24 text-right sm:w-28">Satış fiyatı</th><th className="th w-24 text-right sm:w-32">Toplam</th></tr></thead>
                 <tbody>
                   {o.lines.map((l, i) => (
                     <tr key={i}>
                       <td className="td"><div className="flex items-center gap-3"><div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-neutral-50 text-lg sm:flex">🎨</div><span className="font-medium">{l.name}</span>{l.variant && <span className="rounded-md border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-xs text-neutral-700">{l.variant}</span>}</div></td>
-                      <td className="td text-right">{l.qty}</td>
+                      <td className="td text-right">{l.qty} {l.package_name || 'adet'}{(l.units_per_package || 1) > 1 && <span className="block text-xs text-neutral-500">{l.qty * (l.units_per_package || 1)} {l.unit_name || 'adet'}</span>}</td>
                       <td className="td text-right">{l.price != null ? money(l.price) : <span className="text-neutral-400">—</span>}</td>
                       <td className="td text-right font-medium">{l.price != null ? money(l.qty * l.price) : <span className="text-neutral-400">—</span>}</td>
                     </tr>
@@ -96,10 +82,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               </table>
             </div>
             {o.labels && <div className="mx-4 my-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm sm:mx-5"><span className="font-medium">🏷 Etiket / kişiselleştirme notu:</span> {o.labels}</div>}
-          </Card>
-
-          <Card title={<><Truck className="h-4 w-4 text-neutral-500" />Kargo / Teslimat</>} actions={o.shipping_company ? <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold">{SHIPPING_COMPANIES[o.shipping_company]}</span> : <span className="text-xs text-neutral-500">Henüz kargoya verilmedi</span>}>
-            <ShipmentCard order={{ id: o.id, status: o.status, desi: o.desi, package_count: o.package_count, shipping_payer: o.shipping_payer, shipping_fee: o.shipping_fee, shipping_company: o.shipping_company, shipping_tracking_no: o.shipping_tracking_no, dhl_tracking_no: o.dhl_tracking_no, dhl_status_text: o.dhl_status_text, dhl_last_check: o.dhl_last_check, shipped_at: o.shipped_at, delivered_at: o.delivered_at, tracking_url: o.tracking_url }} copyBlock={copyBlock(o)} canCreate={dhl.canCreate()} canTrack={dhl.canTrack()} onlineSubeUrl={ONLINE_SUBE_URL} />
           </Card>
 
           <Card title="Zaman Çizelgesi">
@@ -113,6 +95,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <p className="mt-1"><SourcePill source={o.source} /></p>
             <dl className="mt-4 space-y-2 border-t border-neutral-100 pt-3 text-sm">
               <div className="flex justify-between text-neutral-600"><dt>Ara Toplam</dt><dd>{money(o.subtotal)}</dd></div>
+              <div className="flex justify-between text-neutral-600"><dt>KDV ({o.tax_rate || 0}%)</dt><dd>{money(o.subtotal * ((o.tax_rate || 0) / 100))}</dd></div>
               <div className="flex justify-between text-neutral-600"><dt>{o.shipping_payer === 'alici' ? 'Kargo (alıcı öder)' : 'Kargo'}</dt><dd>{money(o.shipping_fee)}</dd></div>
               <div className="flex justify-between border-t border-neutral-100 pt-2 text-base font-semibold"><dt>Toplam</dt><dd>{money(o.total)}</dd></div>
             </dl>
@@ -122,6 +105,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </Card>
           <Card title="Durum İşlemleri">
             <StatusActions id={o.id} status={o.status} next={o.next_statuses} />
+          </Card>
+          <Card title={<><Truck className="h-4 w-4 text-neutral-500" />Kargo</>}>
+            <ShipmentCard order={{ id: o.id, status: o.status, desi: o.desi, package_count: o.package_count, shipping_payer: o.shipping_payer, shipping_fee: o.shipping_fee }} />
           </Card>
           {o.status === 'teslim_edildi' && (
             <Card title="Memnuniyet">

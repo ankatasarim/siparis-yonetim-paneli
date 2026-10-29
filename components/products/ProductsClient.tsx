@@ -11,9 +11,9 @@ import { money } from '@/lib/format';
 import { STANDARD_COLORS } from '@/lib/constants';
 import type { Product } from '@/lib/types';
 
-interface Draft { name: string; price: string; description: string; image: string; desi: string; options: string; active: boolean }
-const EMPTY: Draft = { name: '', price: '', description: '', image: '', desi: '0', options: '', active: true };
-const toDraft = (p: Product): Draft => ({ name: p.name, price: p.price != null ? String(p.price) : '', description: p.description || '', image: p.image || '', desi: String(p.desi ?? 0), options: (p.options || []).join(', '), active: p.active !== 0 });
+interface Draft { name: string; unit_price: string; units_per_package: string; unit_name: string; package_name: string; description: string; image: string; desi: string; options: string; active: boolean }
+const EMPTY: Draft = { name: '', unit_price: '', units_per_package: '1', unit_name: 'adet', package_name: 'adet', description: '', image: '', desi: '0', options: '', active: true };
+const toDraft = (p: Product): Draft => ({ name: p.name, unit_price: p.unit_price != null ? String(p.unit_price) : '', units_per_package: String(p.units_per_package || 1), unit_name: p.unit_name || 'adet', package_name: p.package_name || 'adet', description: p.description || '', image: p.image || '', desi: String(p.desi ?? 0), options: (p.options || []).join(', '), active: p.active !== 0 });
 const optionsText = (p: Product) => (p.options || []).join(', ');
 const fmtDesi = (d: number | null | undefined) => (d ? String(d).replace('.', ',') : '0');
 const norm = (s: string | null | undefined) => (s || '').toLocaleLowerCase('tr');
@@ -40,7 +40,7 @@ export function ProductsClient({ initial }: { initial: Product[] }) {
   const save = async () => {
     if (!draft.name.trim()) return toast('Ürün adı gerekli', 'err');
     setBusy(true);
-    const payload = { name: draft.name, price: draft.price.trim() === '' ? null : draft.price, description: draft.description, image: draft.image, desi: draft.desi.trim() === '' ? 0 : draft.desi, options: draft.options, active: draft.active };
+    const payload = { name: draft.name, unit_price: draft.unit_price.trim() === '' ? null : draft.unit_price, units_per_package: draft.units_per_package, unit_name: draft.unit_name, package_name: draft.package_name, description: draft.description, image: draft.image, desi: draft.desi.trim() === '' ? 0 : draft.desi, options: draft.options, active: draft.active };
     try {
       if (editing === 'new') {
         const p = await api.post<Product>('/api/products', payload);
@@ -105,7 +105,7 @@ export function ProductsClient({ initial }: { initial: Product[] }) {
                 {optionsText(p) && <p className="text-xs text-primary-text">Seçenekler: {optionsText(p)}</p>}
                 <p className="text-xs text-neutral-500">Desi: {fmtDesi(p.desi)}</p>
               </div>
-              <p className="shrink-0 font-semibold">{p.price != null ? money(p.price) : <span className="font-normal text-neutral-400">fiyat yok</span>}</p>
+                <p className="shrink-0 text-right font-semibold">{p.unit_price != null ? <>{money(p.unit_price)}<span className="font-normal text-neutral-500"> / {p.unit_name}</span></> : <span className="font-normal text-neutral-400">fiyat yok</span>}{p.units_per_package > 1 && <span className="block text-xs font-normal text-neutral-500">{p.units_per_package} {p.unit_name} / {p.package_name} · paket {p.price != null ? money(p.price) : 'fiyat yok'}</span>}</p>
             </div>
             <div className="mt-3 flex items-center gap-2">
               {activePill(p)}
@@ -131,7 +131,7 @@ export function ProductsClient({ initial }: { initial: Product[] }) {
                       <div className="min-w-0"><p className="font-medium">{p.name}</p>{p.description && <p className="max-w-md truncate text-xs text-neutral-500">{p.description}</p>}{optionsText(p) && <p className="max-w-md truncate text-xs text-primary-text">Seçenekler: {optionsText(p)}</p>}</div>
                     </div>
                   </td>
-                  <td className="td text-right font-medium">{p.price != null ? money(p.price) : <span className="font-normal text-neutral-400">—</span>}</td>
+                  <td className="td text-right"><span className="font-medium">{p.unit_price != null ? `${money(p.unit_price)} / ${p.unit_name}` : <span className="font-normal text-neutral-400">—</span>}</span>{p.units_per_package > 1 && <span className="block text-xs font-normal text-neutral-500">{p.units_per_package} {p.unit_name} / {p.package_name} · {p.price != null ? money(p.price) : '—'}</span>}</td>
                   <td className="td text-right text-neutral-600">{fmtDesi(p.desi)}</td>
                   <td className="td">{activePill(p)}</td>
                   <td className="td">
@@ -152,7 +152,13 @@ export function ProductsClient({ initial }: { initial: Product[] }) {
         footer={<><button className="btn" onClick={close} disabled={busy}>Vazgeç</button><button className="btn btn-primary" onClick={save} disabled={busy}>{busy && <Spinner />}{editing === 'new' ? 'Ekle' : 'Kaydet'}</button></>}>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Ürün adı *" className="sm:col-span-2"><input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} className="input" placeholder="Örn: İsimli kolye (gümüş)" autoFocus /></Field>
-          <Field label="Fiyat (₺)" hint="Boş bırakılırsa siparişte elle girilir."><input value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} inputMode="decimal" className="input" placeholder="0,00" /></Field>
+          <div className="grid grid-cols-2 gap-3 sm:col-span-2">
+            <Field label={`Birim fiyatı (₺ / ${draft.unit_name || 'adet'})`} hint="Satış paketinin fiyatı içerik adediyle otomatik hesaplanır."><input value={draft.unit_price} onChange={(e) => setDraft({ ...draft, unit_price: e.target.value })} inputMode="decimal" className="input" placeholder="0,00" /></Field>
+            <Field label="Pakette kaç birim var?" hint="Tekli ürünlerde 1 bırakın."><input value={draft.units_per_package} onChange={(e) => { const value = e.target.value; const size = Number(value); const package_name = draft.package_name === 'adet' && size > 1 ? 'paket' : draft.package_name === 'paket' && size === 1 ? 'adet' : draft.package_name; setDraft({ ...draft, units_per_package: value, package_name }); }} inputMode="numeric" className="input" placeholder="1" /></Field>
+            <Field label="İç birim adı" hint="Örn. adet, metre, gram"><input value={draft.unit_name} onChange={(e) => setDraft({ ...draft, unit_name: e.target.value })} className="input" placeholder="adet" /></Field>
+            <Field label="Satış birimi adı" hint="Örn. paket, kutu, koli; tekli ürünlerde adet"><input value={draft.package_name} onChange={(e) => setDraft({ ...draft, package_name: e.target.value })} className="input" placeholder="paket" /></Field>
+          </div>
+          <p className="-mt-2 text-xs text-neutral-500 sm:col-span-2">Paket fiyatı önizleme: {draft.unit_price.trim() && Number(draft.units_per_package) > 0 ? money(Math.round((Number(draft.unit_price.replace(',', '.')) || 0) * Number(draft.units_per_package) * 100) / 100) : 'Birim fiyat girilmedi'}</p>
           <Field label="Desi" hint="Kargo hesabı için; şimdilik 0 bırakabilirsiniz."><input value={draft.desi} onChange={(e) => setDraft({ ...draft, desi: e.target.value })} inputMode="decimal" className="input" placeholder="0" /></Field>
           <Field label="Görsel adresi (URL)" hint="Şimdilik boş kalabilir." className="sm:col-span-2"><input value={draft.image} onChange={(e) => setDraft({ ...draft, image: e.target.value })} className="input" placeholder="https://…/urun.jpg" /></Field>
           <Field label="Açıklama" className="sm:col-span-2"><textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} className="input min-h-[60px]" placeholder="Malzeme, ölçü…" /></Field>

@@ -2,15 +2,15 @@
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Copy, ExternalLink, Truck, RefreshCw, Check, XCircle, Lock, Clock, Smile, Frown, Send, MoreHorizontal, Pencil, Trash2, MessageSquare, ArrowRight, Package, CreditCard, Plus, Bell } from 'lucide-react';
+import { Copy, Truck, Check, XCircle, Lock, Clock, Smile, Frown, Send, MoreHorizontal, Pencil, Trash2, MessageSquare, ArrowRight, Package, CreditCard, Plus, Bell } from 'lucide-react';
 import { api, copyText } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { Field } from '@/components/ui';
 import { MsgStatusPill, PaymentPill } from '@/components/Pills';
-import { STATUSES, SHIPPING_PAYERS, SHIPPING_COMPANIES, SATISFACTION_LABELS, PAYMENT_STATUSES, PAYMENT_METHODS, ACCOUNT_PAYMENT_METHOD, MESSAGE_KIND_LABELS } from '@/lib/constants';
+import { STATUSES, SHIPPING_PAYERS, SATISFACTION_LABELS, PAYMENT_STATUSES, PAYMENT_METHODS, ACCOUNT_PAYMENT_METHOD, MESSAGE_KIND_LABELS } from '@/lib/constants';
 import { fmtDate, money } from '@/lib/format';
-import type { Message, OrderEvent, OrderStatus, PaymentStatus, Satisfaction, ShippingCompany, ShippingPayer } from '@/lib/types';
+import type { Message, OrderEvent, OrderStatus, PaymentStatus, Satisfaction, ShippingPayer } from '@/lib/types';
 
 function useAction() {
   const router = useRouter();
@@ -26,21 +26,16 @@ function useAction() {
 }
 
 /* ---------------- Kargo ---------------- */
-export function ShipmentCard({ order, copyBlock, canCreate, canTrack, onlineSubeUrl }: {
-  order: { id: number; status: OrderStatus; desi: number | null; package_count: number; shipping_payer: ShippingPayer; shipping_fee: number; shipping_company: ShippingCompany | null; shipping_tracking_no: string | null; dhl_tracking_no: string | null; dhl_status_text: string | null; dhl_last_check: string | null; shipped_at: string | null; delivered_at: string | null; tracking_url: string | null };
-  copyBlock: string; canCreate: boolean; canTrack: boolean; onlineSubeUrl: string;
+export function ShipmentCard({ order }: {
+  order: { id: number; status: OrderStatus; desi: number | null; package_count: number; shipping_payer: ShippingPayer; shipping_fee: number };
 }) {
   const { run, busy, toast } = useAction();
   const [desi, setDesi] = useState(order.desi != null ? String(order.desi) : '');
   const [pkg, setPkg] = useState(String(order.package_count || 1));
-  const [payer, setPayer] = useState<ShippingPayer>(order.shipping_payer);
+  const [payer, setPayer] = useState<ShippingPayer>(order.shipping_payer || 'gonderici');
   const [fee, setFee] = useState(String(order.shipping_fee || 0));
   const [dims, setDims] = useState({ w: '', l: '', h: '' });
-  const [trackingNo, setTrackingNo] = useState('');
-  const [company, setCompany] = useState<ShippingCompany>(order.shipping_company || 'dhl');
-  const [confirmApi, setConfirmApi] = useState(false);
   const closed = order.status === 'teslim_edildi' || order.status === 'iptal';
-  const preShip = order.status === 'yeni' || order.status === 'hazirlaniyor' || order.status === 'hazirlandi';
   const fields = () => ({ desi, package_count: pkg, shipping_payer: payer, shipping_fee: fee });
 
   const calc = () => {
@@ -50,66 +45,24 @@ export function ShipmentCard({ order, copyBlock, canCreate, canTrack, onlineSube
   };
 
   return (
-    <div className="space-y-4">
-      {!closed && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Desi"><input value={desi} onChange={(e) => setDesi(e.target.value)} inputMode="decimal" className="input" /></Field>
-          <Field label="Parça"><input type="number" min={1} value={pkg} onChange={(e) => setPkg(e.target.value)} className="input" /></Field>
-          <Field label="Kargo ücreti (₺)"><input value={fee} onChange={(e) => setFee(e.target.value)} inputMode="decimal" className="input" /></Field>
-          <Field label="Kargo ödemesi">
-            <select value={payer} onChange={(e) => setPayer(e.target.value as ShippingPayer)} className="input">
-              {(Object.keys(SHIPPING_PAYERS) as ShippingPayer[]).map((k) => <option key={k} value={k}>{SHIPPING_PAYERS[k]}</option>)}
-            </select>
-          </Field>
-          <div className="col-span-2 flex flex-wrap items-end gap-2 sm:col-span-4">
-            <Field label="Desi hesapla (cm)">
-              <div className="flex gap-1.5">
-                <input placeholder="En" value={dims.w} onChange={(e) => setDims({ ...dims, w: e.target.value })} inputMode="decimal" className="input w-16 px-2 sm:w-20" />
-                <input placeholder="Boy" value={dims.l} onChange={(e) => setDims({ ...dims, l: e.target.value })} inputMode="decimal" className="input w-16 px-2 sm:w-20" />
-                <input placeholder="Yük." value={dims.h} onChange={(e) => setDims({ ...dims, h: e.target.value })} inputMode="decimal" className="input w-16 px-2 sm:w-20" />
-                <button onClick={calc} className="btn btn-sm">=</button>
-              </div>
-            </Field>
-            <button disabled={busy} onClick={() => run(() => api.put(`/api/orders/${order.id}`, fields()), 'Kargo bilgileri kaydedildi')} className="btn btn-sm ml-auto">Kargo bilgilerini kaydet</button>
-          </div>
+    <div className="space-y-3">
+      <Field label="Desi"><input disabled={closed} value={desi} onChange={(e) => setDesi(e.target.value)} inputMode="decimal" className="input" /></Field>
+      {!closed && <Field label="Desi hesapla (cm)">
+        <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-1.5">
+          <input placeholder="En" value={dims.w} onChange={(e) => setDims({ ...dims, w: e.target.value })} inputMode="decimal" className="input min-w-0 px-2" />
+          <input placeholder="Boy" value={dims.l} onChange={(e) => setDims({ ...dims, l: e.target.value })} inputMode="decimal" className="input min-w-0 px-2" />
+          <input placeholder="Yük." value={dims.h} onChange={(e) => setDims({ ...dims, h: e.target.value })} inputMode="decimal" className="input min-w-0 px-2" />
+          <button onClick={calc} className="btn btn-sm">=</button>
         </div>
-      )}
-
-      {preShip && (
-        <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50 p-4">
-          <p className="mb-2 text-xs text-neutral-600">Kargo şirketini seçip takip numarasını isteğe bağlı girebilirsiniz. Kayıttan sonra sipariş kargoya verildi durumuna alınır.</p>
-          <pre className="whitespace-pre-wrap rounded-md border border-neutral-200 bg-white p-3 font-mono text-xs leading-relaxed">{copyBlock}</pre>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button onClick={async () => { if (await copyText(copyBlock)) toast('Kopyalandı', 'ok'); }} className="btn btn-sm"><Copy className="h-3.5 w-3.5" />Kopyala</button>
-            {company === 'dhl' && <a href={onlineSubeUrl} target="_blank" rel="noopener" className="btn btn-sm"><ExternalLink className="h-3.5 w-3.5" />DHL Online Şube</a>}
-            {canCreate && <button disabled={busy} onClick={() => setConfirmApi(true)} className="btn btn-sm btn-dark"><Truck className="h-3.5 w-3.5" />DHL API ile gönderi oluştur</button>}
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <select value={company} onChange={(e) => setCompany(e.target.value as ShippingCompany)} className="input max-w-[170px]">{(Object.entries(SHIPPING_COMPANIES) as [ShippingCompany, string][]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-            <input value={trackingNo} onChange={(e) => setTrackingNo(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') (document.getElementById('ship-save') as HTMLButtonElement)?.click(); }} placeholder="Takip numarası (isteğe bağlı)" className="input max-w-xs" />
-            <button id="ship-save" disabled={busy} onClick={() => run(() => api.post(`/api/orders/${order.id}/shipment`, { ...fields(), company, tracking_no: trackingNo.trim() }), company === 'elden_teslim' ? 'Elden teslim edildi' : 'Kargoya verildi olarak kaydedildi')} className="btn btn-sm btn-primary">{company === 'elden_teslim' ? 'Elden teslim edildi' : 'Kargoya verildi olarak kaydet'}</button>
-          </div>
-          <ConfirmDialog open={confirmApi} text="DHL API üzerinden gönderi oluşturulsun mu? Alıcı bilgileri ve desi DHL'ye iletilecek." okLabel="Oluştur" busy={busy} onCancel={() => setConfirmApi(false)} onConfirm={async () => { const ok = await run(() => api.post(`/api/orders/${order.id}/shipment`, { ...fields(), create_dhl: true }), 'DHL gönderisi oluşturuldu'); if (ok) setConfirmApi(false); }} />
-        </div>
-      )}
-
-      {order.shipping_company && (
-        <div className="space-y-3">
-          <dl className="kv">
-            <dt>Teslimat şekli</dt><dd>{SHIPPING_COMPANIES[order.shipping_company]}</dd>
-            {order.shipping_tracking_no && <><dt>Takip No</dt><dd className="flex flex-wrap items-center gap-2"><span className="font-mono">{order.shipping_tracking_no}</span>{order.tracking_url && <a href={order.tracking_url} target="_blank" rel="noopener" className="text-primary-text hover:underline">takip <ExternalLink className="inline h-3 w-3" /></a>}<button onClick={async () => { if (await copyText(order.shipping_tracking_no!)) toast('Kopyalandı', 'ok'); }} className="btn btn-xs">kopyala</button></dd></>}
-            {order.shipping_company === 'dhl' && <><dt>DHL durumu</dt><dd>{order.dhl_status_text || '—'}{order.dhl_last_check && <span className="ml-2 text-xs text-neutral-500">son kontrol {fmtDate(order.dhl_last_check)}</span>}</dd></>}
-            {order.shipped_at && <><dt>Kargo tarihi</dt><dd>{fmtDate(order.shipped_at)}</dd></>}
-            {order.delivered_at && <><dt>Teslim</dt><dd>{fmtDate(order.delivered_at)}</dd></>}
-          </dl>
-          {order.status === 'kargoya_verildi' && (
-            <div className="flex flex-wrap gap-2">
-              {order.shipping_company === 'dhl' && order.dhl_tracking_no && canTrack && <button disabled={busy} onClick={() => run(async () => { const r = await api.post(`/api/orders/${order.id}/track`); toast(r.tracked ? 'DHL: ' + (r.result ? r.result.text : '—') : r.message); })} className="btn btn-sm"><RefreshCw className="h-3.5 w-3.5" />Durumu sorgula</button>}
-              <button disabled={busy} onClick={() => run(() => api.post(`/api/orders/${order.id}/status`, { status: 'teslim_edildi' }), 'Teslim edildi olarak işaretlendi')} className="btn btn-sm btn-primary"><Check className="h-3.5 w-3.5" />Teslim edildi olarak işaretle</button>
-            </div>
-          )}
-        </div>
-      )}
+      </Field>}
+      <Field label="Parça"><input disabled={closed} type="number" min={1} value={pkg} onChange={(e) => setPkg(e.target.value)} className="input" /></Field>
+      <Field label="Kargo ücreti (₺)"><input disabled={closed} value={fee} onChange={(e) => setFee(e.target.value)} inputMode="decimal" className="input" /></Field>
+      <Field label="Kargo ödemesi">
+        <select disabled={closed} value={payer} onChange={(e) => setPayer(e.target.value as ShippingPayer)} className="input">
+          {(Object.keys(SHIPPING_PAYERS) as ShippingPayer[]).map((k) => <option key={k} value={k}>{SHIPPING_PAYERS[k]}</option>)}
+        </select>
+      </Field>
+      {!closed && <button disabled={busy} onClick={() => run(() => api.put(`/api/orders/${order.id}`, fields()), 'Kargo bilgileri kaydedildi')} className="btn btn-sm w-full">Kargo bilgilerini kaydet</button>}
     </div>
   );
 }
@@ -121,10 +74,11 @@ export function StatusActions({ id, status, next }: { id: number; status: OrderS
   const labels: Partial<Record<OrderStatus, { label: string; icon: ReactNode; cls: string }>> = {
     hazirlaniyor: { label: 'Hazırlığa al', icon: <Clock className="h-3.5 w-3.5" />, cls: 'btn-primary' },
     hazirlandi: { label: 'Hazırlandı', icon: <Check className="h-3.5 w-3.5" />, cls: 'btn-primary' },
+    kargoya_verildi: { label: 'Kargoya verildi', icon: <Truck className="h-3.5 w-3.5" />, cls: 'btn-primary' },
     teslim_edildi: { label: 'Teslim edildi', icon: <Check className="h-3.5 w-3.5" />, cls: 'btn-primary' },
     iptal: { label: 'İptal et', icon: <XCircle className="h-3.5 w-3.5" />, cls: 'btn-danger' },
   };
-  const items = next.filter((s) => s !== 'kargoya_verildi');
+  const items = next;
   if (!items.length) return <p className="text-sm text-neutral-500">Bu sipariş {STATUSES[status].label.toLowerCase()} durumunda; başka işlem yok.</p>;
   return (
     <div className="flex flex-wrap gap-2">
@@ -132,7 +86,7 @@ export function StatusActions({ id, status, next }: { id: number; status: OrderS
         const l = labels[s]!;
         return <button key={s} disabled={busy} onClick={() => (s === 'iptal' ? setConfirmCancel(true) : run(() => api.post(`/api/orders/${id}/status`, { status: s }), 'Durum güncellendi'))} className={`btn btn-sm ${l.cls}`}>{l.icon}{l.label}</button>;
       })}
-      {(status === 'hazirlaniyor' || status === 'hazirlandi') && <p className="w-full text-xs text-neutral-500">Kargoya verirken kargo şirketini seçin; takip numarası isteğe bağlıdır.</p>}
+      {(status === 'hazirlaniyor' || status === 'hazirlandi') && <p className="w-full text-xs text-neutral-500">Kargoya verme işlemini buradan kaydedebilirsiniz.</p>}
       <ConfirmDialog open={confirmCancel} text="Sipariş iptal edilsin mi? Bu işlem geri alınamaz." okLabel="İptal et" danger busy={busy} onCancel={() => setConfirmCancel(false)} onConfirm={async () => { const ok = await run(() => api.post(`/api/orders/${id}/status`, { status: 'iptal' }), 'Sipariş iptal edildi'); if (ok) setConfirmCancel(false); }} />
     </div>
   );
@@ -267,33 +221,26 @@ export function Timeline({ id, events, author }: { id: number; events: OrderEven
       <div className="mb-4 flex items-start gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-white">{(author || 'A').charAt(0).toUpperCase()}</div>
         <div className="flex-1">
-          <div className="flex gap-2">
-            <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} placeholder="Yorum yaz..." className="input" />
-            <button disabled={busy || !text.trim()} onClick={submit} className="btn btn-primary">Gönder</button>
-          </div>
-          <p className="mt-1.5 flex items-center gap-1 text-xs text-neutral-500"><Lock className="h-3 w-3" />Yorumları sadece siz görebilirsiniz, müşteriye gitmez.</p>
+          <p className="text-sm font-medium">Yorum ekle</p>
+          <textarea value={text} onChange={(e) => setText(e.target.value)} className="input mt-1 min-h-20" placeholder="Siparişle ilgili not..." />
+          <button disabled={busy || !text.trim()} onClick={submit} className="btn btn-sm mt-2">Yorumu kaydet</button>
         </div>
       </div>
-      <ol className="relative ml-4 border-l border-neutral-200">
-        {list.map((e) => {
-          const by = e.meta && typeof e.meta.by === 'string' ? (e.meta.by as string) : null;
-          const isComment = e.type === 'yorum';
-          return (
-            <li key={e.id} className="mb-4 ml-5">
-              <span className={`absolute -left-[13px] flex h-6 w-6 items-center justify-center rounded-full border-2 border-white ${isComment ? 'bg-primary text-white' : 'bg-neutral-200 text-neutral-600'}`}>{EVENT_ICONS[e.type] || <Clock className="h-3.5 w-3.5" />}</span>
-              <div className={isComment ? 'rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2' : ''}>
-                <p className="text-sm">{e.description}</p>
-                <p className="text-xs text-neutral-500">{fmtDate(e.created_at)}{by && by !== 'panel' ? ` · ${by}` : ''}</p>
-              </div>
-            </li>
-          );
-        })}
+      <ol className="space-y-3 border-l border-neutral-200 pl-4">
+        {list.map((event) => (
+          <li key={event.id} className="relative text-sm">
+            <span className="absolute -left-[21px] top-1 flex h-3 w-3 items-center justify-center rounded-full bg-white text-neutral-500">{EVENT_ICONS[event.type] || <Clock className="h-3 w-3" />}</span>
+            <p className="text-neutral-800">{event.description}</p>
+            <p className="mt-0.5 text-xs text-neutral-500">{fmtDate(event.created_at)}</p>
+          </li>
+        ))}
+        {!list.length && <li className="text-sm text-neutral-500">Henüz kayıt yok.</li>}
       </ol>
     </div>
   );
 }
 
-/* ---------------- ... menüsü ---------------- */
+/* ---------------- Diğer işlemler menüsü ---------------- */
 export function OrderActionsMenu({ id, orderNo }: { id: number; orderNo: number }) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
