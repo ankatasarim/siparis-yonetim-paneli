@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { filterFinanceEntries } from '../components/finance/FinanceClient';
 import { calcTotals, linesSummary, normalizeLines } from '../lib/services/orders';
 import { packagePrice, parseProductOptions } from '../lib/services/products';
+import * as productsService from '../lib/services/products';
 import { fmtDay, fmtTime } from '../lib/format';
 import * as db from '../lib/db';
 import * as inventory from '../lib/services/inventory';
@@ -66,6 +67,14 @@ async function testInventoryLifecycle() {
   await db.ready({ memory: true });
   const store = db.store();
   assert.equal((await inventory.overview()).stock_rows.length, 0, 'an untouched stock screen should remain empty');
+  const untrackedProduct = await productsService.create({ name: 'Yeni takip kapalı ürün' });
+  assert.equal(untrackedProduct.inventory_enabled, 0, 'new products should default to stock tracking off');
+  const untrackedOrder = await store.insert<{ id: number }>('orders', {
+    order_no: 990000, customer_id: 1, status: 'yeni', lines_json: JSON.stringify([{ name: untrackedProduct.name, product_id: untrackedProduct.id, qty: 1, units_per_package: 1 }]),
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  });
+  await inventory.syncOrder(untrackedOrder.id);
+  assert.equal((await store.select({ table: 'inventory_reservations', where: [{ col: 'order_id', op: 'eq', val: untrackedOrder.id }] })).rows.length, 0, 'untracked new products should not block order submission');
   const product = await store.insert<{ id: number }>('products', {
     name: 'Stok testi', inventory_enabled: 1, stock_on_hand: 10, stock_reserved: 0,
     units_per_package: 3, unit_name: 'adet', package_name: 'paket', created_at: new Date().toISOString(), updated_at: new Date().toISOString(),

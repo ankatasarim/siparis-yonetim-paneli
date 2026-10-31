@@ -162,7 +162,7 @@ export async function create(data: unknown): Promise<Product> {
     name: c.name, price, units_per_package: unitsPerPackage, unit_price: unitPrice,
     unit_name: c.unit_name ?? 'adet', package_name: c.package_name ?? (unitsPerPackage > 1 ? 'paket' : 'adet'),
     description: c.description ?? '', image: c.image ?? '', desi: c.desi ?? 0, options_json: c.options_json ?? '[]',
-    active: c.active ?? 1, sort_order: c.sort_order ?? 0, sku: c.sku ?? '', inventory_enabled: c.inventory_enabled ?? 1,
+    active: c.active ?? 1, sort_order: c.sort_order ?? 0, sku: c.sku ?? '', inventory_enabled: c.inventory_enabled ?? 0,
     stock_on_hand: 0, stock_reserved: 0, low_stock_threshold: c.low_stock_threshold ?? 0, created_at: t, updated_at: t,
   });
   return hydrate(row)!;
