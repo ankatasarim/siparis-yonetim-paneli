@@ -60,7 +60,7 @@ export async function list(monthInput: string | null) {
   return { month, entries, income, expense, net: round2(income - expense) };
 }
 
-export async function create(input: unknown) {
+function parseFinanceInput(input: unknown) {
   const data = input as Record<string, unknown> | null;
   if (!data || !['income', 'expense'].includes(String(data.type))) throw httpError(400, 'Gelir veya gider türü seçin');
   const amount = toNumber(data.amount);
@@ -72,9 +72,18 @@ export async function create(input: unknown) {
   const description = String(data.description || '').trim().slice(0, 160);
   if (!category || !description) throw httpError(400, 'Kategori ve açıklama zorunludur');
   const notes = String(data.notes || '').trim().slice(0, 500);
-  return db.store().insert('finance_transactions', {
-    type: data.type, category, description, amount: round2(amount), date, notes, created_at: now(),
-  });
+  return { type: data.type, category, description, amount: round2(amount), date, notes };
+}
+
+export async function create(input: unknown) {
+  return db.store().insert('finance_transactions', { ...parseFinanceInput(input), created_at: now() });
+}
+
+export async function update(id: number, input: unknown) {
+  if (!Number.isInteger(id) || id <= 0) throw httpError(400, 'Geçersiz kayıt');
+  const rows = await db.store().update('finance_transactions', [eq('id', id)], parseFinanceInput(input));
+  if (!rows.length) throw httpError(404, 'Kayıt bulunamadı');
+  return rows[0];
 }
 
 export async function remove(id: number) {

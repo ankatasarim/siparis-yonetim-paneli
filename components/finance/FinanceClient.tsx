@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ArrowDownLeft, ArrowUpRight, CalendarDays, Check, CircleDollarSign, LoaderCircle, Plus, Search, Trash2, Wallet, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, CalendarDays, Check, CircleDollarSign, LoaderCircle, Pencil, Plus, Search, Trash2, Wallet, X } from 'lucide-react';
 import { api } from '@/lib/client';
 import { money, fmtDay } from '@/lib/format';
 import { PageHeader } from '@/components/PageHeader';
@@ -35,6 +35,7 @@ export function FinanceClient({ initial }: { initial: Data }) {
   const [month, setMonth] = useState(initial.month);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<FinanceEntry | null>(null);
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [category, setCategory] = useState(EXPENSE_CATEGORIES[0]);
   const [description, setDescription] = useState('');
@@ -77,6 +78,28 @@ export function FinanceClient({ initial }: { initial: Data }) {
     setCategory(next === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]);
   };
 
+  const openNewForm = () => {
+    setError('');
+    setEditingEntry(null);
+    setType('expense');
+    setCategory(EXPENSE_CATEGORIES[0]);
+    setDescription(''); setAmount(''); setNotes('');
+    setDate(dateForMonth(month));
+    setShowForm(true);
+  };
+
+  const openEditForm = (entry: FinanceEntry) => {
+    setError('');
+    setEditingEntry(entry);
+    setType(entry.type);
+    setCategory(entry.category);
+    setDescription(entry.description);
+    setAmount(String(entry.amount));
+    setDate(entry.date);
+    setNotes(entry.notes);
+    setShowForm(true);
+  };
+
   const handleFilterType = (next: 'all' | 'income' | 'expense') => {
     setFilterType(next);
     setFilterCategory((current) => {
@@ -90,8 +113,11 @@ export function FinanceClient({ initial }: { initial: Data }) {
     setSaving(true);
     setError('');
     try {
-      await api.post('/api/finance', { type, category, description, amount, date, notes });
+      const payload = { type, category, description, amount, date, notes };
+      if (editingEntry) await api.put(`/api/finance/${editingEntry.id.replace('manual-', '')}`, payload);
+      else await api.post('/api/finance', payload);
       setShowForm(false);
+      setEditingEntry(null);
       setDescription(''); setAmount(''); setNotes('');
       await load(month);
     } catch (e) { setError((e as Error).message); }
@@ -113,7 +139,7 @@ export function FinanceClient({ initial }: { initial: Data }) {
   return (
     <>
       <PageHeader title="Gelir / Gider" subtitle="İşletmenin nakit akışını ve aylık kârlılığını takip edin."
-        actions={<button onClick={() => { setError(''); setDate(dateForMonth(month)); setShowForm(true); }} className="btn btn-primary"><Plus className="h-4 w-4" />Kayıt ekle</button>} />
+        actions={<button onClick={openNewForm} className="btn btn-primary"><Plus className="h-4 w-4" />Kayıt ekle</button>} />
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm text-neutral-500"><CalendarDays className="h-4 w-4" /><span>Dönem</span>
@@ -166,7 +192,7 @@ export function FinanceClient({ initial }: { initial: Data }) {
               <td className="td"><div className="font-medium">{entry.description}</div>{entry.notes && <div className="mt-0.5 max-w-xs truncate text-xs text-neutral-500">{entry.notes}</div>}</td>
               <td className="td"><span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs text-neutral-600">{entry.category}</span>{entry.source === 'order' && <span className="ml-1.5 text-[10px] text-neutral-400">OTOMATİK</span>}</td>
               <td className={`td whitespace-nowrap text-right font-semibold ${entry.type === 'income' ? 'text-emerald-700' : 'text-rose-700'}`}>{entry.type === 'income' ? '+' : '−'} {money(entry.amount)}</td>
-              <td className="td text-right">{entry.source === 'manual' && <button aria-label={`${entry.description} kaydını sil`} title="Kaydı sil" onClick={() => void remove(entry)} className="rounded p-1.5 text-neutral-400 opacity-0 transition hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 focus:opacity-100"><Trash2 className="h-4 w-4" /></button>}</td>
+              <td className="td text-right">{entry.source === 'manual' && <div className="flex justify-end gap-1 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100"><button aria-label={`${entry.description} kaydını düzenle`} title="Kaydı düzenle" onClick={() => openEditForm(entry)} className="rounded p-1.5 text-neutral-400 hover:bg-primary-soft hover:text-primary-text"><Pencil className="h-4 w-4" /></button><button aria-label={`${entry.description} kaydını sil`} title="Kaydı sil" onClick={() => void remove(entry)} className="rounded p-1.5 text-neutral-400 hover:bg-rose-50 hover:text-rose-600"><Trash2 className="h-4 w-4" /></button></div>}</td>
             </tr>)}</tbody>
             <tfoot>
               <tr className="border-t border-neutral-200 bg-neutral-50">
@@ -188,7 +214,7 @@ export function FinanceClient({ initial }: { initial: Data }) {
 
       {showForm && <div className="fixed inset-0 z-50 flex items-end justify-center bg-neutral-950/40 p-0 sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setShowForm(false); }}>
         <section role="dialog" aria-modal="true" aria-labelledby="finance-form-title" className="max-h-[92vh] w-full overflow-y-auto rounded-t-xl bg-white shadow-xl sm:max-w-lg sm:rounded-xl">
-          <header className="flex items-center justify-between border-b border-neutral-100 px-5 py-4"><div><h2 id="finance-form-title" className="text-lg font-semibold">Yeni kayıt</h2><p className="mt-0.5 text-xs text-neutral-500">Gelir veya gider hareketini kaydedin.</p></div><button type="button" aria-label="Kapat" onClick={() => setShowForm(false)} className="rounded-md p-2 text-neutral-500 hover:bg-neutral-100"><X className="h-5 w-5" /></button></header>
+          <header className="flex items-center justify-between border-b border-neutral-100 px-5 py-4"><div><h2 id="finance-form-title" className="text-lg font-semibold">{editingEntry ? 'Kaydı düzenle' : 'Yeni kayıt'}</h2><p className="mt-0.5 text-xs text-neutral-500">Gelir veya gider hareketini {editingEntry ? 'güncelleyin' : 'kaydedin'}.</p></div><button type="button" aria-label="Kapat" onClick={() => setShowForm(false)} className="rounded-md p-2 text-neutral-500 hover:bg-neutral-100"><X className="h-5 w-5" /></button></header>
           <form onSubmit={(event) => void submit(event)} className="space-y-4 p-5">
             <div className="grid grid-cols-2 gap-2 rounded-lg bg-neutral-100 p-1"><button type="button" onClick={() => switchType('expense')} className={`rounded-md py-2 text-sm font-medium transition ${type === 'expense' ? 'bg-white text-rose-700 shadow-sm' : 'text-neutral-500'}`}>Gider</button><button type="button" onClick={() => switchType('income')} className={`rounded-md py-2 text-sm font-medium transition ${type === 'income' ? 'bg-white text-emerald-700 shadow-sm' : 'text-neutral-500'}`}>Diğer gelir</button></div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -196,12 +222,12 @@ export function FinanceClient({ initial }: { initial: Data }) {
               <div><label htmlFor="finance-date" className="label">Tarih</label><input id="finance-date" required type="date" value={date} onChange={(event) => setDate(event.target.value)} className="input" /></div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div><label htmlFor="finance-category" className="label">Kategori</label><select id="finance-category" value={category} onChange={(event) => setCategory(event.target.value)} className="input">{formCategoryOptions.map((item) => <option key={item}>{item}</option>)}</select></div>
+              <div><label htmlFor="finance-category" className="label">Kategori</label><select id="finance-category" value={category} onChange={(event) => setCategory(event.target.value)} className="input">{!formCategoryOptions.includes(category) && <option>{category}</option>}{formCategoryOptions.map((item) => <option key={item}>{item}</option>)}</select></div>
               <div><label htmlFor="finance-description" className="label">Açıklama</label><input id="finance-description" required maxLength={160} value={description} onChange={(event) => setDescription(event.target.value)} placeholder={type === 'expense' ? 'Örn. kargo malzemesi' : 'Örn. ek satış'} className="input" /></div>
             </div>
             <div><label htmlFor="finance-notes" className="label">Not <span className="font-normal">(isteğe bağlı)</span></label><textarea id="finance-notes" maxLength={500} rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Ek bilgi" className="input resize-y" /></div>
             {error && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-            <footer className="flex justify-end gap-2 border-t border-neutral-100 pt-4"><button type="button" disabled={saving} onClick={() => setShowForm(false)} className="btn">İptal</button><button type="submit" disabled={saving} className="btn btn-primary">{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}Kaydet</button></footer>
+            <footer className="flex justify-end gap-2 border-t border-neutral-100 pt-4"><button type="button" disabled={saving} onClick={() => setShowForm(false)} className="btn">İptal</button><button type="submit" disabled={saving} className="btn btn-primary">{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{editingEntry ? 'Güncelle' : 'Kaydet'}</button></footer>
           </form>
         </section>
       </div>}

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowDownLeft, ArrowUpRight, BookUser, CalendarDays, Check, ChevronRight, CircleDollarSign, LoaderCircle, Plus, Search, Wallet, X } from 'lucide-react';
 import { api } from '@/lib/client';
 import { fmtDay, money } from '@/lib/format';
+import { formatTurkishPhone } from '@/lib/phone';
 import { PageHeader } from '@/components/PageHeader';
 import { Avatar } from '@/components/ui';
 import type { AccountTransaction, CustomerAccount } from '@/lib/services/accounts';
@@ -98,7 +99,7 @@ export function AccountsClient({ initial }: { initial: Overview }) {
           <div className="max-h-[660px] divide-y divide-neutral-100 overflow-y-auto">
             {accounts.map((account) => <button key={account.id} onClick={() => void openAccount(account)} className={`flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-neutral-50 ${selected?.customer.id === account.id ? 'bg-primary-soft/60' : ''}`}>
               <Avatar name={account.name || account.ig_username} src={account.profile_pic} size="sm" />
-              <span className="min-w-0 flex-1"><span className="block truncate font-medium">{account.name || 'İsimsiz müşteri'}</span><span className="block truncate text-xs text-neutral-500">{[account.phone, account.ig_username ? `@${account.ig_username}` : ''].filter(Boolean).join(' · ') || 'Telefon veya Instagram bilgisi yok'}</span></span>
+              <span className="min-w-0 flex-1"><span className="block truncate font-medium">{account.name || 'İsimsiz müşteri'}</span><span className="block truncate text-xs text-neutral-500">{[formatTurkishPhone(account.phone), account.ig_username ? `@${account.ig_username}` : ''].filter(Boolean).join(' · ') || 'Telefon veya Instagram bilgisi yok'}</span></span>
               <span className="text-right"><span className={`block font-semibold ${account.balance > 0 ? 'text-amber-700' : account.balance < 0 ? 'text-emerald-700' : 'text-neutral-500'}`}>{money(Math.abs(account.balance))}</span><span className="block text-[10px] text-neutral-400">{account.balance > 0 ? 'borçlu' : account.balance < 0 ? 'avans' : 'kapalı'}</span></span>
               <ChevronRight className="h-4 w-4 shrink-0 text-neutral-400" />
             </button>)}
@@ -110,7 +111,7 @@ export function AccountsClient({ initial }: { initial: Overview }) {
           {selected ? <>
             <header className="flex flex-wrap items-center gap-3 border-b border-neutral-100 px-4 py-4 sm:px-5">
               <Avatar name={selected.customer.name || selected.customer.ig_username} src={selected.customer.profile_pic} />
-              <div className="min-w-0 flex-1"><h2 className="truncate font-semibold">{selected.customer.name || 'İsimsiz müşteri'}</h2><p className="truncate text-xs text-neutral-500">{[selected.customer.phone, selected.customer.ig_username ? `@${selected.customer.ig_username}` : ''].filter(Boolean).join(' · ') || selected.customer.email || 'Müşteri bilgileri'}</p></div>
+              <div className="min-w-0 flex-1"><h2 className="truncate font-semibold">{selected.customer.name || 'İsimsiz müşteri'}</h2><p className="truncate text-xs text-neutral-500">{[formatTurkishPhone(selected.customer.phone), selected.customer.ig_username ? `@${selected.customer.ig_username}` : ''].filter(Boolean).join(' · ') || selected.customer.email || 'Müşteri bilgileri'}</p></div>
               <div className="text-right"><p className="text-[11px] text-neutral-500">Güncel bakiye</p><p className={`font-semibold ${selected.customer.balance > 0 ? 'text-amber-700' : selected.customer.balance < 0 ? 'text-emerald-700' : ''}`}>{money(Math.abs(selected.customer.balance))}</p><p className="text-[10px] text-neutral-400">{selected.customer.balance > 0 ? 'müşteri borcu' : selected.customer.balance < 0 ? 'müşteri avansı' : 'hesap kapalı'}</p></div>
             </header>
             <div className="flex flex-wrap gap-2 border-b border-neutral-100 px-4 py-3 sm:px-5"><button onClick={() => openForm('charge')} className="btn btn-sm"><ArrowDownLeft className="h-4 w-4 text-amber-600" />Vadeli satış / borç</button><button onClick={() => openForm('payment')} className="btn btn-sm"><ArrowUpRight className="h-4 w-4 text-emerald-600" />Tahsilat al</button></div>

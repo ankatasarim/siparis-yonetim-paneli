@@ -9,6 +9,7 @@ import { Card } from '@/components/ui';
 import { ShipmentCard, StatusActions, PaymentCard, SatisfactionCard, NotificationsCard, Timeline, OrderActionsMenu } from '@/components/orders/detail';
 import { STATUSES, SHIPPING_PAYERS } from '@/lib/constants';
 import { money, fmtDate } from '@/lib/format';
+import { formatTurkishPhone } from '@/lib/phone';
 import type { OrderFull } from '@/lib/types';
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -50,7 +51,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               <div>
                 <Link href={`/musteriler/${c.id}`} className="font-medium text-primary-text hover:underline">{custName}</Link>
                 <p className="mt-1 text-sm text-neutral-700">{c.email || <span className="text-neutral-400">e-posta yok</span>}</p>
-                <p className="text-sm text-neutral-700">{c.phone || <span className="text-neutral-400">telefon yok</span>}</p>
+                <p className="text-sm text-neutral-700">{c.phone ? formatTurkishPhone(c.phone) : <span className="text-neutral-400">telefon yok</span>}</p>
                 <p className="mt-2 flex items-center gap-1.5 text-xs text-neutral-600"><Instagram className="h-3.5 w-3.5 text-pink-600" />{c.ig_username ? '@' + c.ig_username : 'Instagram adı yok'}{c.ig_user_id ? <span className="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">bağlı</span> : <span className="ml-1 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500">bağlı değil</span>}</p>
               </div>
               <div className="md:border-l md:border-neutral-100 md:pl-6">

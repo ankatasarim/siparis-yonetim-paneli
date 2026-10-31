@@ -9,6 +9,7 @@ export * as backup from './backup';
 export * as finance from './finance';
 export * as reports from './reports';
 export * as accounts from './accounts';
+export * as inventory from './inventory';
 export * as instagram from '../integrations/instagram';
 export * as dhl from '../integrations/dhl';
 export { ready } from '../db';

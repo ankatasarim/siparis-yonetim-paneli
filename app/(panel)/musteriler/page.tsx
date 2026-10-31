@@ -7,6 +7,7 @@ import { SearchBox } from '@/components/SearchBox';
 import { RowLink } from '@/components/RowLink';
 import { Avatar, Empty } from '@/components/ui';
 import { money, fmtDay } from '@/lib/format';
+import { formatTurkishPhone } from '@/lib/phone';
 
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
@@ -24,7 +25,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             <Avatar name={c.name || c.ig_username} src={c.profile_pic} />
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{c.name || <span className="text-neutral-400">isimsiz</span>}{c.unread > 0 && <span className="ml-2 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-white">{c.unread}</span>}</p>
-              <p className="truncate text-xs text-neutral-500">{[c.phone, c.ig_username ? '@' + c.ig_username : '', [c.district, c.city].filter(Boolean).join(' / ')].filter(Boolean).join(' · ') || '—'}</p>
+              <p className="truncate text-xs text-neutral-500">{[formatTurkishPhone(c.phone), c.ig_username ? '@' + c.ig_username : '', [c.district, c.city].filter(Boolean).join(' / ')].filter(Boolean).join(' · ') || '—'}</p>
               <p className="text-xs text-neutral-500">{c.order_count} sipariş · {money(c.total_spent)}</p>
             </div>
             <ChevronRight className="h-4 w-4 shrink-0 text-neutral-400" />
@@ -43,7 +44,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                 <RowLink key={c.id} href={`/musteriler/${c.id}`}>
                   <td className="td"><div className="flex items-center gap-3"><Avatar name={c.name || c.ig_username} src={c.profile_pic} size="sm" /><div><div className="font-medium">{c.name || <span className="text-neutral-400">isimsiz</span>}{c.unread > 0 && <span className="ml-2 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-white">{c.unread}</span>}</div><div className="text-xs text-neutral-500">{c.email}</div></div></div></td>
                   <td className="td">{c.ig_username ? <span className="inline-flex items-center gap-1"><Instagram className="h-3.5 w-3.5 text-pink-600" />@{c.ig_username}</span> : <span className="text-neutral-400">—</span>}{c.ig_user_id && <span className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">bağlı</span>}</td>
-                  <td className="td">{c.phone || <span className="text-neutral-400">—</span>}</td>
+                  <td className="td">{c.phone ? formatTurkishPhone(c.phone) : <span className="text-neutral-400">—</span>}</td>
                   <td className="td">{[c.district, c.city].filter(Boolean).join(' / ') || <span className="text-neutral-400">—</span>}</td>
                   <td className="td">{c.order_count}</td>
                   <td className="td font-medium">{money(c.total_spent)}</td>

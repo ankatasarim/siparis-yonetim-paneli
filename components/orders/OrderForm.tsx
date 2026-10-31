@@ -8,8 +8,10 @@ import { useToast } from '@/components/Toast';
 import { Card, Field, Avatar } from '@/components/ui';
 import { Spinner } from '@/components/Loading';
 import { UnsavedGuard } from '@/components/UnsavedGuard';
+import { PhoneInput } from '@/components/customers/PhoneInput';
 import { PAYMENT_STATUSES, SHIPPING_PAYERS, PAYMENT_METHODS, ACCOUNT_PAYMENT_METHOD, ORDER_SOURCES, DEFAULT_SOURCE } from '@/lib/constants';
 import { money } from '@/lib/format';
+import { formatTurkishPhone } from '@/lib/phone';
 import type { Customer, CustomerRow, OrderFull, OrderLine, OrderSource, PaymentStatus, Product, ProductOptionGroup, ShippingPayer } from '@/lib/types';
 
 interface LineDraft { name: string; qty: string; unit_qty: string; price: string; product_id?: number | null; variant: string; units_per_package?: number; unit_name?: string; package_name?: string; unit_price: string }
@@ -139,6 +141,20 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
     if (incompleteVariant) return toast(`"${incompleteVariant.name.trim()}" için tüm ürün varyasyonlarını seçin`, 'err');
     if (!cust.name.trim() && !custId) return toast('Müşteri adı gerekli', 'err');
     setBusy(true);
+    let selectedCustomerId = custId;
+    try {
+      if (!selectedCustomerId && (cust.phone || cust.email || cust.ig_username)) {
+        const match = await api.post<Customer | null>('/api/customers/match', cust);
+        if (match) {
+          selectedCustomerId = match.id;
+          setCustId(match.id);
+          setIgLinked(Boolean(match.ig_user_id));
+          setCust({ name: match.name || '', email: match.email || '', phone: match.phone || '', address: match.address || '', city: match.city || '', district: match.district || '', postal_code: match.postal_code || '', ig_username: match.ig_username || '' });
+        }
+      }
+    } catch {
+      // Mevcut müşteri kontrolü başarısız olsa bile normal akış devam eder.
+    }
     const payload = {
       customer: cust, lines: validLines.map((l) => ({ name: l.name.trim(), qty: num(l.qty) || 1, price: l.price.trim() === '' ? null : num(l.price), product_id: l.product_id ?? null, variant: l.variant.trim() || null, units_per_package: l.units_per_package || 1, unit_name: l.unit_name || 'adet', package_name: l.package_name || 'adet', unit_price: l.unit_price.trim() === '' ? null : num(l.unit_price) })),
       notes: f.notes, labels: f.labels, desi: f.desi, package_count: f.package_count, tax_rate: num(f.tax_rate), shipping_payer: f.shipping_payer, shipping_fee: f.shipping_fee,
@@ -146,13 +162,13 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
     };
     try {
       if (isEdit) {
-        await api.put(`/api/orders/${order!.id}`, { ...payload, customer_id: custId });
+        await api.put(`/api/orders/${order!.id}`, { ...payload, customer_id: selectedCustomerId });
         toast('Sipariş güncellendi', 'ok');
         setSaved(true);
         startNav();
         router.push(`/siparisler/${order!.id}`);
       } else {
-        const o = await api.post('/api/orders', custId ? { ...payload, customer_id: custId } : payload);
+        const o = await api.post('/api/orders', selectedCustomerId ? { ...payload, customer_id: selectedCustomerId } : payload);
         toast(`Sipariş #${o.order_no} oluşturuldu`, 'ok');
         setSaved(true);
         startNav();
@@ -180,7 +196,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
                       {results.map((x) => (
                         <button key={x.id} onClick={() => pick(x)} className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-neutral-50">
                           <Avatar name={x.name || x.ig_username} src={x.profile_pic} size="sm" />
-                          <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{x.name || '@' + x.ig_username}</p><p className="truncate text-xs text-neutral-500">{[x.phone, x.ig_username ? '@' + x.ig_username : '', x.city].filter(Boolean).join(' · ')}</p></div>
+                          <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{x.name || '@' + x.ig_username}</p><p className="truncate text-xs text-neutral-500">{[formatTurkishPhone(x.phone), x.ig_username ? '@' + x.ig_username : '', x.city].filter(Boolean).join(' · ')}</p></div>
                           <span className="shrink-0 text-xs text-neutral-500">{x.order_count} sipariş</span>
                         </button>
                       ))}
@@ -192,7 +208,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
             )}
             <div className="grid gap-3 md:grid-cols-2">
               <Field label="Ad Soyad *"><input value={cust.name} onChange={(e) => setCust({ ...cust, name: e.target.value })} className="input" /></Field>
-              <Field label="Telefon"><input type="tel" value={cust.phone} onChange={(e) => setCust({ ...cust, phone: e.target.value })} className="input" placeholder="05xx xxx xx xx" /></Field>
+              <Field label="Telefon"><PhoneInput value={cust.phone} onChange={(phone) => setCust({ ...cust, phone })} /></Field>
               <Field label="E-posta"><input type="email" value={cust.email} onChange={(e) => setCust({ ...cust, email: e.target.value })} className="input" /></Field>
               <Field label={<span className="flex items-center gap-1"><Instagram className="h-3 w-3 text-pink-600" />Instagram kullanıcı adı</span>}><input value={cust.ig_username} onChange={(e) => setCust({ ...cust, ig_username: e.target.value })} readOnly={igLinked} title={igLinked ? 'Instagram bağlantısından geldi' : ''} className="input" placeholder="kullanici_adi" /></Field>
               <Field label="Adres" className="md:col-span-2"><textarea value={cust.address} onChange={(e) => setCust({ ...cust, address: e.target.value })} className="input min-h-[60px]" placeholder="Mahalle, sokak, no, daire" /></Field>

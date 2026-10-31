@@ -47,8 +47,40 @@ export interface Product {
   /** 1 = aktif (sipariş formunda önerilir), 0 = pasif */
   active: number;
   sort_order: number;
+  sku: string;
+  inventory_enabled: number;
+  stock_on_hand: number;
+  stock_reserved: number;
+  low_stock_threshold: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface InventoryMovement {
+  id: number;
+  product_id: number;
+  variant_id?: number | null;
+  variant_label?: string | null;
+  product_name?: string;
+  movement_type: 'receipt' | 'adjustment' | 'shipment' | 'return' | 'order_reservation' | 'reservation_release';
+  quantity: number;
+  unit_cost: number | null;
+  reference: string | null;
+  note: string;
+  created_at: string;
+}
+
+export interface InventoryVariant {
+  id: number;
+  product_id: number;
+  variant_key: string;
+  label: string;
+  sku: string;
+  stock_on_hand: number;
+  stock_reserved: number;
+  low_stock_threshold: number;
+  active: number;
+  inventory_enabled: number;
 }
 
 export interface Customer {

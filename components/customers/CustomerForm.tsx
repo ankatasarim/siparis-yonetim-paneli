@@ -5,6 +5,7 @@ import { Trash2 } from 'lucide-react';
 import { api } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import { Field } from '@/components/ui';
+import { PhoneInput } from '@/components/customers/PhoneInput';
 import { ConfirmDialog } from '@/components/Modal';
 import type { Customer } from '@/lib/types';
 
@@ -30,7 +31,7 @@ export function CustomerForm({ customer }: { customer?: Customer | null }) {
     <div className="space-y-3">
       <div className="grid gap-3 md:grid-cols-2">
         <Field label="Ad Soyad *"><input value={f.name} onChange={set('name')} className="input" /></Field>
-        <Field label="Telefon"><input value={f.phone} onChange={set('phone')} className="input" /></Field>
+        <Field label="Telefon"><PhoneInput value={f.phone} onChange={(phone) => setF({ ...f, phone })} /></Field>
         <Field label="E-posta"><input value={f.email} onChange={set('email')} className="input" /></Field>
         <Field label="Instagram kullanıcı adı"><input value={f.ig_username} onChange={set('ig_username')} readOnly={Boolean(customer?.ig_user_id)} className="input" placeholder="kullanici_adi" /></Field>
         <Field label="Adres" className="md:col-span-2"><textarea value={f.address} onChange={set('address')} className="input min-h-[60px]" /></Field>

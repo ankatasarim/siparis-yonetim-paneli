@@ -7,13 +7,13 @@ import { StoreError, type Cond, type Query, type Row, type Store, type Table, ty
  * Supabase deposuyla aynı filtre/sıralama anlamını taşır; yerel geliştirme ve testler için.
  */
 
-const TABLES: Table[] = ['customers', 'products', 'orders', 'messages', 'order_events', 'finance_transactions', 'account_transactions', 'settings'];
-const UNIQUE: Partial<Record<Table, string[]>> = { customers: ['ig_user_id'], orders: ['order_no'], messages: ['ig_mid'], settings: ['key'] };
-const HAS_ID = new Set<Table>(['customers', 'products', 'orders', 'messages', 'order_events', 'finance_transactions', 'account_transactions']);
+const TABLES: Table[] = ['customers', 'products', 'orders', 'messages', 'order_events', 'finance_transactions', 'account_transactions', 'settings', 'inventory_movements', 'inventory_reservations', 'inventory_variants'];
+const UNIQUE: Partial<Record<Table, string[]>> = { customers: ['ig_user_id'], orders: ['order_no'], messages: ['ig_mid'], settings: ['key'], inventory_reservations: ['order_id_product_variant'], inventory_variants: ['product_id_variant_key'] };
+const HAS_ID = new Set<Table>(['customers', 'products', 'orders', 'messages', 'order_events', 'finance_transactions', 'account_transactions', 'inventory_movements', 'inventory_reservations', 'inventory_variants']);
 /** Veritabanındaki sütun varsayılanları: eksik alanlar undefined yerine bu değerlerle doldurulur. */
 const DEFAULTS: Record<Table, Row> = {
   customers: { ig_user_id: null, ig_username: null, name: '', email: '', phone: '', address: '', city: '', district: '', postal_code: '', notes: '', profile_pic: null },
-  products: { price: null, units_per_package: 1, unit_price: null, unit_name: 'adet', package_name: 'adet', description: '', image: '', desi: 0, options_json: '[]', active: 1, sort_order: 0 },
+  products: { price: null, units_per_package: 1, unit_price: null, unit_name: 'adet', package_name: 'adet', description: '', image: '', desi: 0, options_json: '[]', active: 1, sort_order: 0, sku: '', inventory_enabled: 0, stock_on_hand: 0, stock_reserved: 0, low_stock_threshold: 0 },
   orders: {
     status: 'yeni', payment_status: 'bekleniyor', payment_method: '', shipping_payer: 'gonderici', lines_json: '[]', items: '', notes: '', labels: '', desi: null,
     package_count: 1, tax_rate: 0, shipping_fee: 0, subtotal: 0, total: 0, source: 'instagram', shipping_company: null, shipping_tracking_no: null, dhl_tracking_no: null, dhl_shipment_ref: null, dhl_status: null, dhl_status_text: null,
@@ -24,12 +24,15 @@ const DEFAULTS: Record<Table, Row> = {
   finance_transactions: { type: 'expense', category: '', description: '', amount: 0, date: '', notes: '' },
   account_transactions: { type: 'charge', order_id: null, description: '', amount: 0, date: '', notes: '' },
   settings: { value: null },
+  inventory_movements: { product_id: 0, variant_id: null, variant_label: null, movement_type: 'adjustment', quantity: 0, unit_cost: null, reference: null, note: '', created_at: '' },
+  inventory_reservations: { order_id: 0, product_id: 0, variant_id: null, variant_key: '', quantity: 0, state: 'reserved', updated_at: '' },
+  inventory_variants: { product_id: 0, variant_key: '', label: '', sku: '', stock_on_hand: 0, stock_reserved: 0, low_stock_threshold: 0, active: 1, inventory_enabled: 0, created_at: '', updated_at: '' },
 };
 
 type Data = Record<Table, Row[]>;
 
 function emptyData(): Data {
-  return { customers: [], products: [], orders: [], messages: [], order_events: [], finance_transactions: [], account_transactions: [], settings: [] };
+  return { customers: [], products: [], orders: [], messages: [], order_events: [], finance_transactions: [], account_transactions: [], settings: [], inventory_movements: [], inventory_reservations: [], inventory_variants: [] };
 }
 
 function likeToRegex(pattern: string): RegExp {

@@ -2,6 +2,7 @@ import * as db from '../db';
 import { eq, ilike, isIn, or } from '../store';
 import { httpError, now, pick, round2 } from '../utils';
 import type { Customer, CustomerRow } from '../types';
+import { formatTurkishPhone } from '../phone';
 
 const FIELDS = ['name', 'email', 'phone', 'address', 'city', 'district', 'postal_code', 'notes', 'ig_username', 'ig_user_id', 'profile_pic'] as const;
 const NULLABLE = new Set(['ig_user_id', 'ig_username', 'profile_pic']);
@@ -10,7 +11,7 @@ const validId = (id: number | string) => Number.isInteger(Number(id)) && Number(
 function clean(data: unknown): Record<string, string | null> {
   const out: Record<string, string | null> = {};
   for (const [k, v] of Object.entries(pick(data as object, FIELDS))) {
-    out[k] = v == null ? (NULLABLE.has(k) ? null : '') : String(v).trim();
+    out[k] = v == null ? (NULLABLE.has(k) ? null : '') : k === 'phone' ? formatTurkishPhone(String(v)) : String(v).trim();
   }
   if (out.ig_username) out.ig_username = out.ig_username.replace(/^@/, '');
   if (out.ig_username === '') out.ig_username = null;
@@ -57,9 +58,50 @@ export async function list({ q, limit = 200 }: { q?: string | null; limit?: numb
     .sort((a, b) => String(b.last_order_at || b.updated_at).localeCompare(String(a.last_order_at || a.updated_at)));
 }
 
+function normalizeText(value: string | null | undefined): string {
+  return (value || '').trim().toLocaleLowerCase('tr').replace(/\s+/g, ' ');
+}
+
+function normalizePhone(value: string | null | undefined): string {
+  return (value || '').replace(/\D+/g, '');
+}
+
+export async function findMatch(data: unknown): Promise<Customer | null> {
+  const c = clean(data);
+  if (!c.name && !c.phone && !c.email && !c.ig_username && !c.ig_user_id) return null;
+
+  if (c.ig_user_id) {
+    const byIg = await findByIg(c.ig_user_id);
+    if (byIg) return byIg;
+  }
+  if (c.phone) {
+    const { rows } = await db.store().select<Customer>({ table: 'customers', where: [eq('phone', c.phone)], limit: 20 });
+    const match = rows.find((row) => normalizePhone(row.phone) === normalizePhone(c.phone));
+    if (match) return match;
+  }
+  if (c.email) {
+    const { rows } = await db.store().select<Customer>({ table: 'customers', where: [eq('email', c.email)], limit: 20 });
+    const match = rows.find((row) => normalizeText(row.email) === normalizeText(c.email));
+    if (match) return match;
+  }
+  if (c.ig_username) {
+    const { rows } = await db.store().select<Customer>({ table: 'customers', where: [eq('ig_username', c.ig_username)], limit: 20 });
+    const match = rows.find((row) => normalizeText(row.ig_username) === normalizeText(c.ig_username));
+    if (match) return match;
+  }
+  if (c.name && !c.phone && !c.email && !c.ig_username) {
+    const { rows } = await db.store().select<Customer>({ table: 'customers', where: [eq('name', c.name)], limit: 20 });
+    const exact = rows.find((row) => normalizeText(row.name) === normalizeText(c.name));
+    if (exact && rows.length === 1) return exact;
+  }
+  return null;
+}
+
 export async function create(data: unknown): Promise<Customer> {
   const c = clean(data);
   if (!c.name && !c.ig_username && !c.ig_user_id) throw httpError(400, 'Müşteri adı gerekli');
+  const existing = await findMatch(c);
+  if (existing) return existing;
   if (c.ig_user_id && (await findByIg(c.ig_user_id))) throw httpError(409, 'Bu Instagram hesabına bağlı müşteri zaten var');
   const t = now();
   return db.store().insert<Customer>('customers', {

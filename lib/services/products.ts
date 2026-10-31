@@ -8,7 +8,7 @@ import type { Product, ProductOptionGroup } from '../types';
  * options (varyasyon grupları) DB'de options_json olarak saklanır; string listeler eski şemadan uyumluluk için desteklenir.
  */
 
-const FIELDS = ['name', 'price', 'units_per_package', 'unit_price', 'unit_name', 'package_name', 'description', 'image', 'desi', 'options', 'active', 'sort_order'] as const;
+const FIELDS = ['name', 'price', 'units_per_package', 'unit_price', 'unit_name', 'package_name', 'description', 'image', 'desi', 'options', 'active', 'sort_order', 'sku', 'inventory_enabled', 'low_stock_threshold'] as const;
 const MAX_OPTION_GROUPS = 10;
 const MAX_OPTION_VALUES = 100;
 const validId = (id: number | string) => Number.isInteger(Number(id)) && Number(id) > 0;
@@ -72,6 +72,11 @@ function hydrate<T extends Record<string, unknown>>(row: T | null): Product | nu
     unit_price: unitPrice,
     unit_name: String(rest.unit_name || 'adet'),
     package_name: String(rest.package_name || (unitsPerPackage > 1 ? 'paket' : 'adet')),
+    sku: String(rest.sku || ''),
+    inventory_enabled: Number(rest.inventory_enabled) === 1 ? 1 : 0,
+    stock_on_hand: Math.max(0, Number(rest.stock_on_hand) || 0),
+    stock_reserved: Math.max(0, Number(rest.stock_reserved) || 0),
+    low_stock_threshold: Math.max(0, Number(rest.low_stock_threshold) || 0),
     options,
   };
 }
@@ -116,6 +121,13 @@ function clean(data: unknown): Record<string, unknown> {
     out.package_name = v;
   }
   if ('options' in d) out.options_json = JSON.stringify(parseProductOptions(d.options));
+  if ('sku' in d) out.sku = String(d.sku || '').replace(/\s+/g, '').slice(0, 64);
+  if ('inventory_enabled' in d) out.inventory_enabled = d.inventory_enabled === false || d.inventory_enabled === 0 || d.inventory_enabled === '0' ? 0 : 1;
+  if ('low_stock_threshold' in d) {
+    const v = toNumber(d.low_stock_threshold);
+    if (v == null || Number.isNaN(v) || v < 0 || v > 100000000) throw httpError(400, 'Minimum stok miktarı geçersiz');
+    out.low_stock_threshold = v;
+  }
   if ('active' in d) out.active = d.active === false || d.active === 0 || d.active === '0' ? 0 : 1;
   if ('sort_order' in d) {
     const v = parseInt(String(d.sort_order), 10);
@@ -150,7 +162,8 @@ export async function create(data: unknown): Promise<Product> {
     name: c.name, price, units_per_package: unitsPerPackage, unit_price: unitPrice,
     unit_name: c.unit_name ?? 'adet', package_name: c.package_name ?? (unitsPerPackage > 1 ? 'paket' : 'adet'),
     description: c.description ?? '', image: c.image ?? '', desi: c.desi ?? 0, options_json: c.options_json ?? '[]',
-    active: c.active ?? 1, sort_order: c.sort_order ?? 0, created_at: t, updated_at: t,
+    active: c.active ?? 1, sort_order: c.sort_order ?? 0, sku: c.sku ?? '', inventory_enabled: c.inventory_enabled ?? 1,
+    stock_on_hand: 0, stock_reserved: 0, low_stock_threshold: c.low_stock_threshold ?? 0, created_at: t, updated_at: t,
   });
   return hydrate(row)!;
 }

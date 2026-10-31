@@ -14,7 +14,10 @@ export const POST = api(async (req) => {
   const b = await body(req);
   let customerId = b.customer_id ? parseInt(String(b.customer_id), 10) : null;
   if (customerId && b.customer) await customers.update(customerId, b.customer);
-  if (!customerId && b.customer) customerId = (await customers.create(b.customer)).id;
+  if (!customerId && b.customer) {
+    const existing = await customers.findMatch(b.customer);
+    customerId = existing ? existing.id : (await customers.create(b.customer)).id;
+  }
   const order = await orders.create({ ...b, customer_id: customerId });
   return status(order, 201);
 });

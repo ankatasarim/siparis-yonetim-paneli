@@ -21,11 +21,15 @@ export const PUT = api(async (req, { id }) => {
   let customerId = o.customer_id;
   if ('customer_id' in b && (b.customer_id === null || b.customer_id === '')) {
     if (!b.customer) throw httpError(400, 'Müşteri bilgisi gerekli');
-    customerId = (await customers.create(b.customer)).id;
+    const existing = await customers.findMatch(b.customer);
+    customerId = existing ? existing.id : (await customers.create(b.customer)).id;
   } else {
     if (b.customer_id) customerId = parseInt(String(b.customer_id), 10);
-    if (b.customer) await customers.update(customerId, b.customer);
-    else if (customerId !== o.customer_id && !(await customers.get(customerId))) throw httpError(404, 'Müşteri bulunamadı');
+    if (b.customer) {
+      const existing = await customers.findMatch(b.customer);
+      if (existing) customerId = existing.id;
+      else await customers.update(customerId, b.customer);
+    } else if (customerId !== o.customer_id && !(await customers.get(customerId))) throw httpError(404, 'Müşteri bulunamadı');
   }
   return orders.update(id, { ...b, customer_id: customerId });
 });

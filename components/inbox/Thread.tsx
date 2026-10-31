@@ -8,6 +8,7 @@ import { useToast } from '@/components/Toast';
 import { Avatar, Alert } from '@/components/ui';
 import { StatusPill } from '@/components/Pills';
 import { fmtDate } from '@/lib/format';
+import { formatTurkishPhone } from '@/lib/phone';
 import type { Thread as ThreadData, Message } from '@/lib/types';
 
 function linkify(text: string) {
@@ -66,7 +67,7 @@ export function Thread({ initial, igConfigured }: { initial: ThreadData; igConfi
           <p className="truncate font-semibold">{name}</p>
           <p className="flex flex-wrap items-center gap-x-2 text-xs text-neutral-500">
             {c.ig_username && <span className="inline-flex items-center gap-1"><Instagram className="h-3 w-3 text-pink-600" />@{c.ig_username}</span>}
-            <span className="hidden sm:inline">{c.phone || 'telefon yok'}</span>
+            <span className="hidden sm:inline">{c.phone ? formatTurkishPhone(c.phone) : 'telefon yok'}</span>
             {t.active_orders.slice(0, 2).map((o) => <Link key={o.id} href={`/siparisler/${o.id}`} className="inline-flex items-center gap-1 hover:underline">#{o.order_no} <StatusPill status={o.status} /></Link>)}
           </p>
         </div>

@@ -5,6 +5,7 @@ import { httpError, now, normalizeTr, pick, round2, toNumber } from '../utils';
 import { STATUSES, ACTIVE_STATUSES, PAYMENT_STATUSES, SHIPPING_PAYERS, SHIPPING_COMPANIES, SATISFACTION_LABELS, ORDER_SOURCES, DEFAULT_SOURCE, ACCOUNT_PAYMENT_METHOD, trackingUrl } from '../constants';
 import * as dhl from '../integrations/dhl';
 import * as accounts from './accounts';
+import * as inventory from './inventory';
 import type { Customer, Dashboard, Order, OrderEvent, OrderFull, OrderLine, OrderRow, OrderSource, OrderStatus, PaymentStatus, Satisfaction, Message, ShippingCompany } from '../types';
 
 /* ---------- Kancalar ----------
@@ -295,6 +296,12 @@ export async function create(data: Record<string, unknown>): Promise<OrderFull> 
       throw e;
     }
   }
+  try {
+    await inventory.syncOrder(id);
+  } catch (e) {
+    await S().remove('orders', [eq('id', id)]);
+    throw e;
+  }
   if (f.payment_method === ACCOUNT_PAYMENT_METHOD) {
     try {
       const createdOrder = await getRaw(id);
@@ -317,6 +324,9 @@ export async function update(id: number | string, data: unknown): Promise<OrderF
   const existing = await getRaw(id);
   if (!existing) throw httpError(404, 'Sipariş bulunamadı');
   const f = cleanFields(data);
+  if ('lines_json' in f && ['kargoya_verildi', 'teslim_edildi'].includes(existing.status)) {
+    throw httpError(400, 'Kargoya verilen siparişin ürün satırları değiştirilemez; iade/değişim stok hareketi olarak kaydedilmelidir');
+  }
   const requestedMethod = String(f.payment_method ?? existing.payment_method ?? '').trim();
   const requestedStatus = f.payment_status ?? existing.payment_status;
   if (existing.payment_method === ACCOUNT_PAYMENT_METHOD && requestedMethod !== ACCOUNT_PAYMENT_METHOD) {
@@ -346,7 +356,16 @@ export async function update(id: number | string, data: unknown): Promise<OrderF
   if ('payment_status' in f && f.payment_status !== existing.payment_status) {
     await addEvent(existing.id, 'odeme', `Ödeme durumu: ${PAYMENT_STATUSES[f.payment_status as PaymentStatus].label}${f.payment_method ? ' · ' + f.payment_method : ''}`);
   }
+  const rollback: Record<string, unknown> = { updated_at: now() };
+  for (const key of Object.keys(f)) rollback[key] = key === 'lines_json' ? JSON.stringify(existing.lines) : (existing as unknown as Record<string, unknown>)[key];
   await S().update('orders', [eq('id', existing.id)], { ...f, updated_at: now() });
+  if ('lines_json' in f) {
+    try { await inventory.syncOrder(existing.id); }
+    catch (e) {
+      await S().update('orders', [eq('id', existing.id)], rollback);
+      throw e;
+    }
+  }
   if (requestedMethod === ACCOUNT_PAYMENT_METHOD) {
     const updated = await getRaw(existing.id);
     if (updated) await accounts.syncOrderCharge(updated);
@@ -357,6 +376,7 @@ export async function update(id: number | string, data: unknown): Promise<OrderF
 export async function remove(id: number | string): Promise<boolean> {
   const existing = await getRaw(id);
   if (!existing) throw httpError(404, 'Sipariş bulunamadı');
+  await inventory.syncOrder(existing.id, 'iptal');
   await S().update('messages', [eq('order_id', existing.id)], { order_id: null });
   await S().remove('account_transactions', [eq('order_id', existing.id)]);
   await S().remove('order_events', [eq('order_id', existing.id)]);
@@ -383,6 +403,11 @@ export async function setStatus(id: number | string, status: OrderStatus, opts: 
   }
   if (status === 'iptal') patch.closed_at = t;
   await S().update('orders', [eq('id', order.id)], patch);
+  try { await inventory.syncOrder(order.id); }
+  catch (e) {
+    await S().update('orders', [eq('id', order.id)], { status: order.status, shipped_at: order.shipped_at, delivered_at: order.delivered_at, closed_at: order.closed_at, updated_at: now() });
+    throw e;
+  }
   const by = opts.by || 'panel';
   await addEvent(order.id, 'durum', `${from.label} → ${STATUSES[status].label}${opts.note ? ' · ' + opts.note : ''}`, { from: order.status, to: status, by });
   if (status === 'iptal' && order.payment_method === ACCOUNT_PAYMENT_METHOD) {
