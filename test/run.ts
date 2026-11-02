@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import * as XLSX from 'xlsx';
 import { filterFinanceEntries } from '../components/finance/FinanceClient';
+import { buildPoregoWorkbook, calculateHepsijetCodCommission, getHepsijetDesiFee, POREGO_HEADERS } from '../lib/integrations/porego/excel';
 import { calcTotals, linesSummary, normalizeLines } from '../lib/services/orders';
 import { packagePrice, parseProductOptions } from '../lib/services/products';
 import * as productsService from '../lib/services/products';
@@ -47,9 +49,74 @@ assert.equal(formatTurkishPhone('+90 (532) 123-45-67'), '0532 123 45 67');
 assert.equal(formatTurkishPhone('0532 123 45 67'), '0532 123 45 67');
 assert.equal(formatTurkishPhone('0532'), '0532');
 
+assert.equal(getHepsijetDesiFee(0), 119.79);
+assert.equal(getHepsijetDesiFee(4), 119.79);
+assert.equal(getHepsijetDesiFee(4.01), 171.38);
+assert.equal(getHepsijetDesiFee(10), 171.38);
+assert.equal(getHepsijetDesiFee(10.01), 238.92);
+assert.equal(getHepsijetDesiFee(20), 238.92);
+assert.equal(getHepsijetDesiFee(20.01), 349.47);
+assert.equal(getHepsijetDesiFee(30), 349.47);
+assert.equal(getHepsijetDesiFee(30.01), 405);
+assert.equal(getHepsijetDesiFee(31), 405);
+assert.equal(getHepsijetDesiFee(null), 119.79);
+
+assert.equal(calculateHepsijetCodCommission(0), 20.76);
+assert.equal(calculateHepsijetCodCommission(500), 20.76);
+assert.equal(calculateHepsijetCodCommission(500.01), 34.39);
+assert.equal(calculateHepsijetCodCommission(1000), 34.39);
+assert.equal(calculateHepsijetCodCommission(1000.01), 51.58);
+assert.equal(calculateHepsijetCodCommission(2000), 51.58);
+assert.equal(calculateHepsijetCodCommission(2000.01), 97.03);
+assert.equal(calculateHepsijetCodCommission(3000), 97.03);
+assert.equal(calculateHepsijetCodCommission(3000.01), 116.68);
+assert.equal(calculateHepsijetCodCommission(4000), 116.68);
+assert.equal(calculateHepsijetCodCommission(4000.01), 147.38);
+assert.equal(calculateHepsijetCodCommission(5000), 147.38);
+assert.equal(calculateHepsijetCodCommission(5000.01), 245.64);
+assert.equal(calculateHepsijetCodCommission(7000), 245.64);
+assert.equal(calculateHepsijetCodCommission(7000.01), 343.90);
+assert.equal(calculateHepsijetCodCommission(8000), 383.9);
+
+function poregoCodAmount({ desi, payment_status, shipping_payer, total = 120 }: {
+  desi: number | null;
+  payment_status: 'bekleniyor' | 'alindi' | 'kapida_odeme';
+  shipping_payer: 'gonderici' | 'alici';
+  total?: number;
+}): number {
+  const item = {
+    order: { desi, payment_status, shipping_payer, total, notes: '', labels: '' } as never,
+    customer: { name: 'Ayşe Yılmaz', phone: '', email: '', address: '', city: '', district: '', postal_code: '' } as never,
+  };
+  const workbook = XLSX.read(buildPoregoWorkbook(item), { type: 'buffer' });
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets['Sipariş İçe Aktarma'], { header: 1, raw: true }) as (string | number | null)[][];
+  return Number(rows[1][POREGO_HEADERS.indexOf('Kapıda Ödeme Tutarı')]);
+}
+
+function poregoPaymentType(payment_status: 'bekleniyor' | 'alindi' | 'kapida_odeme', shipping_payer: 'gonderici' | 'alici' = 'alici'): string {
+  const item = {
+    order: { desi: 5, payment_status, shipping_payer, total: 120, notes: '', labels: '' } as never,
+    customer: { name: 'Ayşe Yılmaz', phone: '', email: '', address: '', city: '', district: '', postal_code: '' } as never,
+  };
+  const workbook = XLSX.read(buildPoregoWorkbook(item), { type: 'buffer' });
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets['Sipariş İçe Aktarma'], { header: 1, raw: true }) as (string | number | null)[][];
+  return String(rows[1][POREGO_HEADERS.indexOf('Ödeme Tipi')]);
+}
+
+assert.equal(poregoCodAmount({ desi: 0, payment_status: 'kapida_odeme', shipping_payer: 'alici' }), 260.55);
+assert.equal(poregoCodAmount({ desi: 31, payment_status: 'kapida_odeme', shipping_payer: 'alici' }), 545.76);
+assert.equal(poregoCodAmount({ desi: 5, payment_status: 'bekleniyor', shipping_payer: 'alici' }), 192.14);
+assert.equal(poregoCodAmount({ desi: 5, payment_status: 'alindi', shipping_payer: 'gonderici' }), 0);
+assert.equal(poregoCodAmount({ desi: 5, payment_status: 'kapida_odeme', shipping_payer: 'gonderici' }), 0);
+assert.equal(poregoPaymentType('kapida_odeme'), 'Kapıda Ödeme');
+assert.equal(poregoPaymentType('bekleniyor'), 'Kapıda Ödeme');
+assert.equal(poregoPaymentType('alindi'), 'Kapıda Ödeme');
+assert.equal(poregoPaymentType('kapida_odeme', 'gonderici'), 'Peşin');
+
 console.log('finance filter tests passed');
 console.log('order tax tests passed');
 console.log('product package pricing tests passed');
+console.log('Porego HepsiJet tariff and COD export tests passed');
 
 async function testCustomerDeduplication() {
   await db.ready({ memory: true });

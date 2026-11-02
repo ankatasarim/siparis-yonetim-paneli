@@ -32,7 +32,7 @@ export function CartPopup({ order, compact = false }: { order: CartOrder; compac
             <tbody>
               {order.lines.map((l, i) => (
                 <tr key={i}>
-                  <td className="td"><span className="font-medium">{l.name}</span>{l.variant && <span className="ml-1.5 rounded-md border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-xs text-neutral-700">{l.variant}</span>}</td>
+                  <td className="td"><div><span className="font-medium">{l.name}</span>{l.variant && <span className="mt-1 block w-fit rounded-md border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-xs text-neutral-700">{l.variant}</span>}</div></td>
                   <td className="td text-right">{l.qty} {l.package_name || 'adet'}{(l.units_per_package || 1) > 1 && <span className="block text-xs text-neutral-500">{l.qty * (l.units_per_package || 1)} {l.unit_name || 'adet'}</span>}</td>
                   <td className="td text-right">{l.price != null ? money(l.price) : <span className="text-neutral-400">—</span>}</td>
                   <td className="td text-right font-medium">{l.price != null ? money(l.qty * l.price) : <span className="text-neutral-400">—</span>}</td>
