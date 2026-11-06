@@ -7,6 +7,7 @@ import { Pagination } from '@/components/Pagination';
 import { RowLink } from '@/components/RowLink';
 import { PaymentPill, SourcePill } from '@/components/Pills';
 import { StatusMenu } from '@/components/orders/StatusMenu';
+import { OrderTagMenu } from '@/components/orders/OrderTagMenu';
 import { PoregoExportButton } from '@/components/orders/PoregoExportButton';
 import { OrderSelectCheckbox, OrderSelectionProvider, SelectedOrdersExportButton } from '@/components/orders/OrderSelection';
 import { CartPopup } from '@/components/orders/CartPopup';
@@ -36,7 +37,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     <>
       <PageHeader
         title="Siparişler"
-        info="Satıra tıklayarak detaya gidin; durum rozetine tıklayarak durumu listeden değiştirin."
+        info="Satıra tıklayarak detaya gidin; durum ve etiketleri listeden değiştirebilirsiniz."
         actions={<>
           <a href="/api/orders/export" className="btn"><Upload className="h-4 w-4" /><span className="hidden sm:inline">CSV</span><span className="sm:hidden">CSV</span></a>
           <PoregoExportButton />
@@ -55,6 +56,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               <Link href={`/siparisler/${o.id}`} className="min-w-0 flex-1">
                 <p className="text-sm"><span className="font-semibold">#{o.order_no}</span> <span className="text-neutral-500">· {fmtShort(o.created_at)}</span></p>
                 <p className="truncate font-medium">{custName(o)}</p>
+                {o.customer_city && <p className="truncate text-xs text-neutral-500">İl: {o.customer_city}</p>}
                 <p className="truncate text-xs text-neutral-500">{o.items || '—'}</p>
               </Link>
               <div className="flex shrink-0 items-center gap-1"><CartPopup order={cart(o)} compact /><Link href={`/siparisler/${o.id}`} aria-label="Sipariş detayı"><ChevronRight className="h-4 w-4 text-neutral-400" /></Link></div>
@@ -63,6 +65,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               <StatusMenu id={o.id} orderNo={o.order_no} status={o.status} shippingCompany={o.shipping_company} trackingNo={o.shipping_tracking_no} />
               <PaymentPill status={o.payment_status} method={o.payment_method} />
               <SourcePill source={o.source} className="!text-xs text-neutral-600" />
+              <OrderTagMenu id={o.id} orderNo={o.order_no} tag={o.tag} />
               {o.shipping_tracking_no && <span className="font-mono text-[11px] text-neutral-500">📦 {o.shipping_tracking_no}</span>}
               <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-600">{SHIPPING_PAYERS[o.shipping_payer]}</span>
             </div>
@@ -83,6 +86,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                 <th className="th">Tarih</th>
                 <th className="th">Müşteri</th>
                 <th className="th">Sipariş Durumu</th>
+                <th className="th">Etiket</th>
                 <th className="th">Ödeme Durumu</th>
                 <th className="th">Toplam Tutar</th>
                 <th className="th">Satış Kanalı</th>
@@ -100,11 +104,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                     <td className="td">
                       <div className="font-medium">{custName(o)}</div>
                       <div className="text-xs text-neutral-500">{o.customer_email || o.customer_phone || (o.customer_ig ? '@' + o.customer_ig : '')}</div>
+                      {o.customer_city && <div className="text-xs text-neutral-500">İl: {o.customer_city}</div>}
                     </td>
                     <td className="td">
                       <StatusMenu id={o.id} orderNo={o.order_no} status={o.status} shippingCompany={o.shipping_company} trackingNo={o.shipping_tracking_no} />
                       {o.satisfaction && o.status === 'teslim_edildi' && <div className="mt-1 text-xs text-neutral-500">{SATISFACTION_LABELS[o.satisfaction]}</div>}
                     </td>
+                    <td className="td"><OrderTagMenu id={o.id} orderNo={o.order_no} tag={o.tag} /></td>
                     <td className="td"><PaymentPill status={o.payment_status} method={o.payment_method} /></td>
                     <td className="td whitespace-nowrap"><CartPopup order={cart(o)} /></td>
                     <td className="td whitespace-nowrap"><SourcePill source={o.source} /></td>
@@ -113,7 +119,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                   </RowLink>
                 );
               })}
-              {!rows.length && <tr><td colSpan={10} className="td">{empty}</td></tr>}
+              {!rows.length && <tr><td colSpan={11} className="td">{empty}</td></tr>}
             </tbody>
           </table>
         </div>

@@ -2,7 +2,7 @@ import * as db from '../db';
 import { cfg } from '../config';
 import { eq, gt, ilike, isIn, isNull, isUniqueViolation, lt, or, type Cond, type Row, type Where } from '../store';
 import { httpError, now, normalizeTr, pick, round2, toNumber } from '../utils';
-import { STATUSES, ACTIVE_STATUSES, PAYMENT_STATUSES, SHIPPING_PAYERS, SHIPPING_COMPANIES, SATISFACTION_LABELS, ORDER_SOURCES, DEFAULT_SOURCE, ACCOUNT_PAYMENT_METHOD, trackingUrl } from '../constants';
+import { STATUSES, ACTIVE_STATUSES, PAYMENT_STATUSES, SHIPPING_PAYERS, SHIPPING_COMPANIES, SATISFACTION_LABELS, ORDER_SOURCES, ORDER_TAGS, DEFAULT_SOURCE, ACCOUNT_PAYMENT_METHOD, trackingUrl } from '../constants';
 import * as dhl from '../integrations/dhl';
 import * as accounts from './accounts';
 import * as inventory from './inventory';
@@ -26,7 +26,7 @@ async function fire(kind: keyof Hooks, payload: unknown) {
   }
 }
 
-const EDITABLE = ['lines', 'notes', 'labels', 'desi', 'package_count', 'tax_rate', 'shipping_payer', 'shipping_fee', 'payment_status', 'payment_method', 'source'] as const;
+const EDITABLE = ['lines', 'notes', 'labels', 'tag', 'desi', 'package_count', 'tax_rate', 'shipping_payer', 'shipping_fee', 'payment_status', 'payment_method', 'source'] as const;
 const validId = (id: number | string) => Number.isInteger(Number(id)) && Number(id) > 0;
 const S = () => db.store();
 
@@ -89,6 +89,11 @@ function cleanFields(data: unknown): Record<string, unknown> {
   }
   if ('notes' in d) out.notes = String(d.notes || '').trim();
   if ('labels' in d) out.labels = String(d.labels || '').trim();
+  if ('tag' in d) {
+    const tag = String(d.tag || '').trim();
+    if (tag && !Object.hasOwn(ORDER_TAGS, tag)) throw httpError(400, 'Geçersiz sipariş etiketi');
+    out.tag = tag;
+  }
   if ('source' in d) {
     const s = String(d.source || DEFAULT_SOURCE).trim().toLowerCase();
     if (!ORDER_SOURCES[s as OrderSource]) throw httpError(400, 'Geçersiz sipariş kanalı');
@@ -131,6 +136,7 @@ function hydrate<T extends Record<string, unknown>>(row: T | null): (Omit<T, 'li
   try { lines = JSON.parse((row.lines_json as string) || '[]'); } catch { lines = []; }
   const { lines_json: _lj, ...rest } = row;
   const normalized: Record<string, unknown> = { ...rest, tax_rate: Number(rest.tax_rate ?? 0) || 0 };
+  normalized.tag = String(normalized.tag || '');
   // Eski yerel yedeklerde de kapandı kayıtlarını teslim edildi olarak göster.
   if (normalized.status === 'kapandi') normalized.status = 'teslim_edildi';
   if (!normalized.shipping_company && normalized.dhl_tracking_no) normalized.shipping_company = 'dhl';
@@ -267,7 +273,7 @@ export async function create(data: Record<string, unknown>): Promise<OrderFull> 
   const customer = (await S().select<{ id: number }>({ table: 'customers', columns: ['id'], where: [eq('id', Number(data.customer_id))], limit: 1 })).rows[0];
   if (!customer) throw httpError(404, 'Müşteri bulunamadı');
   const f = {
-    lines_json: '[]', items: '', notes: '', labels: '', desi: null as number | null, package_count: 1,
+    lines_json: '[]', items: '', notes: '', labels: '', tag: '', desi: null as number | null, package_count: 1,
     shipping_payer: 'gonderici', shipping_fee: 0, payment_status: 'bekleniyor', payment_method: '', source: DEFAULT_SOURCE,
     ...cleanFields(data),
   } as Record<string, unknown>;
@@ -286,7 +292,7 @@ export async function create(data: Record<string, unknown>): Promise<OrderFull> 
     try {
       const row = await S().insert<{ id: number }>('orders', {
         order_no, customer_id: customer.id, status: 'yeni', payment_status: f.payment_status, payment_method: f.payment_method, shipping_payer: f.shipping_payer,
-        lines_json: f.lines_json, items: f.items, notes: f.notes, labels: f.labels, desi: f.desi, package_count: f.package_count,
+        lines_json: f.lines_json, items: f.items, notes: f.notes, labels: f.labels, tag: f.tag, desi: f.desi, package_count: f.package_count,
         tax_rate: Number(f.tax_rate) || 0, shipping_fee: f.shipping_fee, subtotal, total, source: f.source, created_at: t, updated_at: t,
       });
       id = row.id;

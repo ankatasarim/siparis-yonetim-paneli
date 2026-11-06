@@ -1,6 +1,7 @@
 export type OrderStatus = 'yeni' | 'hazirlaniyor' | 'hazirlandi' | 'kargoya_verildi' | 'teslim_edildi' | 'iptal';
 export type ShippingCompany = 'dhl' | 'hepsijet' | 'elden_teslim';
 export type PaymentStatus = 'bekleniyor' | 'alindi' | 'kapida_odeme';
+export type OrderTag = '' | 'acil' | 'oncelikli' | 'kontrol' | 'hediye';
 export type ShippingPayer = 'gonderici' | 'alici';
 export type Satisfaction = 'bekleniyor' | 'memnun' | 'memnun_degil' | 'cevaplandi' | 'cevapsiz';
 export type MessageStatus = 'ok' | 'pending' | 'failed' | 'manual_sent';
@@ -119,6 +120,7 @@ export interface Order {
   items: string;
   notes: string;
   labels: string;
+  tag: OrderTag;
   desi: number | null;
   package_count: number;
   tax_rate: number;

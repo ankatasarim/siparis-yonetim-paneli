@@ -9,6 +9,7 @@ import { fmtDay, fmtTime } from '../lib/format';
 import * as db from '../lib/db';
 import * as inventory from '../lib/services/inventory';
 import * as customersService from '../lib/services/customers';
+import * as ordersService from '../lib/services/orders';
 import { formatTurkishPhone } from '../lib/phone';
 import type { FinanceEntry } from '../lib/services/finance';
 
@@ -128,6 +129,19 @@ async function testCustomerDeduplication() {
   assert.equal(duplicate.id, existing.id, 'duplicate customer should reuse existing record');
   const formatted = await customersService.create({ name: 'Telefon format testi', phone: '+90 532 765 43 21' });
   assert.equal(formatted.phone, '0532 765 43 21', 'customer phones should be stored in the canonical Turkish format');
+
+  const taggedOrder = await db.store().insert<{ id: number }>('orders', {
+    order_no: 999999, customer_id: formatted.id, status: 'yeni', lines_json: JSON.stringify([{ name: 'Etiket testi', qty: 1, price: 100 }]),
+    labels: 'Paketleme notu', created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  });
+  assert.equal((await ordersService.getRaw(taggedOrder.id))?.tag, '', 'new orders should start without an operational tag');
+  await ordersService.update(taggedOrder.id, { tag: 'acil' });
+  const listedTaggedOrder = (await ordersService.list()).rows.find((order) => order.id === taggedOrder.id);
+  assert.equal(listedTaggedOrder?.tag, 'acil', 'operational tags should be persisted and visible in order lists');
+  assert.equal(listedTaggedOrder?.labels, 'Paketleme notu', 'operational tags must not replace product/personalization notes');
+  await assert.rejects(() => ordersService.update(taggedOrder.id, { tag: 'gecersiz' }), /Geçersiz sipariş etiketi/);
+  await ordersService.update(taggedOrder.id, { tag: '' });
+  assert.equal((await ordersService.getRaw(taggedOrder.id))?.tag, '', 'operational tags should be clearable');
 }
 
 async function testInventoryLifecycle() {

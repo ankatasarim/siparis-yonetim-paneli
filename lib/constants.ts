@@ -1,4 +1,11 @@
-import type { OrderSource, OrderStatus, PaymentStatus, Satisfaction, ShippingCompany, ShippingPayer } from './types';
+import type { OrderSource, OrderStatus, OrderTag, PaymentStatus, Satisfaction, ShippingCompany, ShippingPayer } from './types';
+
+export const ORDER_TAGS: Record<Exclude<OrderTag, ''>, { label: string; className: string }> = {
+  acil: { label: 'Acil', className: 'border-red-300 bg-red-50 text-red-700' },
+  oncelikli: { label: 'Öncelikli', className: 'border-orange-300 bg-orange-50 text-orange-700' },
+  kontrol: { label: 'Kontrol', className: 'border-amber-300 bg-amber-50 text-amber-700' },
+  hediye: { label: 'Hediye', className: 'border-violet-300 bg-violet-50 text-violet-700' },
+};
 
 export const STATUSES: Record<OrderStatus, { label: string; next: OrderStatus[]; pill: string; dot: string }> = {
   yeni:            { label: 'Yeni Sipariş',    next: ['hazirlaniyor', 'iptal'],    pill: 'border-blue-300 text-blue-700 bg-blue-50',        dot: 'bg-blue-500' },

@@ -7,6 +7,7 @@ import { FullscreenHeader } from '@/components/FullscreenHeader';
 import { StatusPill, PaymentPill, SourcePill } from '@/components/Pills';
 import { Card } from '@/components/ui';
 import { ShipmentCard, StatusActions, PaymentCard, SatisfactionCard, NotificationsCard, Timeline, OrderActionsMenu } from '@/components/orders/detail';
+import { OrderTagMenu } from '@/components/orders/OrderTagMenu';
 import { STATUSES, SHIPPING_PAYERS } from '@/lib/constants';
 import { money, fmtDate } from '@/lib/format';
 import { formatTurkishPhone } from '@/lib/phone';
@@ -105,7 +106,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <PaymentCard id={o.id} payment_status={o.payment_status} payment_method={o.payment_method} total={o.total} closed={closed} />
           </Card>
           <Card title="Durum İşlemleri">
-            <StatusActions id={o.id} status={o.status} next={o.next_statuses} />
+            <div className="space-y-3">
+              <StatusActions id={o.id} status={o.status} next={o.next_statuses} />
+              <div className="flex items-center justify-between border-t border-neutral-100 pt-3">
+                <span className="text-sm font-medium text-neutral-700">Etiket</span>
+                <OrderTagMenu id={o.id} orderNo={o.order_no} tag={o.tag} />
+              </div>
+            </div>
           </Card>
           <Card title={<><Truck className="h-4 w-4 text-neutral-500" />Kargo</>}>
             <ShipmentCard order={{ id: o.id, status: o.status, desi: o.desi, package_count: o.package_count, shipping_payer: o.shipping_payer, shipping_fee: o.shipping_fee }} />
