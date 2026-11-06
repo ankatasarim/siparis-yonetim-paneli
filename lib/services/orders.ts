@@ -136,7 +136,8 @@ function hydrate<T extends Record<string, unknown>>(row: T | null): (Omit<T, 'li
   try { lines = JSON.parse((row.lines_json as string) || '[]'); } catch { lines = []; }
   const { lines_json: _lj, ...rest } = row;
   const normalized: Record<string, unknown> = { ...rest, tax_rate: Number(rest.tax_rate ?? 0) || 0 };
-  normalized.tag = String(normalized.tag || '');
+  const tag = String(normalized.tag || '');
+  normalized.tag = tag && Object.hasOwn(ORDER_TAGS, tag) ? tag : '';
   // Eski yerel yedeklerde de kapandı kayıtlarını teslim edildi olarak göster.
   if (normalized.status === 'kapandi') normalized.status = 'teslim_edildi';
   if (!normalized.shipping_company && normalized.dhl_tracking_no) normalized.shipping_company = 'dhl';
