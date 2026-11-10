@@ -49,6 +49,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
   const [igLinked, setIgLinked] = useState(Boolean(c0?.ig_user_id));
   const [f, setF] = useState({
     notes: order?.notes || '', labels: order?.labels || '', desi: order?.desi != null ? String(order.desi) : '', package_count: String(order?.package_count || 1), tax_rate: String(order?.tax_rate ?? 0),
+    discount_type: (order?.discount_type || 'percent') as 'percent' | 'amount', discount_value: String(order?.discount_value ?? 0),
     shipping_payer: (order?.shipping_payer || 'gonderici') as ShippingPayer, shipping_fee: String(order?.shipping_fee || 0),
     payment_status: (order?.payment_status || 'bekleniyor') as PaymentStatus, payment_method: order?.payment_method || '',
     source: (order?.source && order.source in ORDER_SOURCES ? order.source : DEFAULT_SOURCE) as OrderSource,
@@ -88,10 +89,12 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
     setCust({ name: '', email: '', phone: '', address: '', city: '', district: '', postal_code: '', ig_username: '' });
   };
 
-  const subtotal = lines.reduce((s, l) => s + num(l.qty) * num(l.price), 0);
+  const subtotal = Math.round(lines.reduce((s, l) => s + num(l.qty) * num(l.price), 0) * 100) / 100;
   const taxRate = num(f.tax_rate);
-  const tax = (subtotal + num(f.shipping_fee)) * (taxRate / 100);
-  const total = subtotal + tax + num(f.shipping_fee);
+  const discountInput = Math.max(0, num(f.discount_value));
+  const discountAmount = Math.round(Math.min(subtotal, f.discount_type === 'percent' ? subtotal * Math.min(discountInput, 100) / 100 : discountInput) * 100) / 100;
+  const tax = (subtotal - discountAmount + num(f.shipping_fee)) * (taxRate / 100);
+  const total = subtotal - discountAmount + tax + num(f.shipping_fee);
   const setLine = (i: number, patch: Partial<LineDraft>) => setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
   const removeLine = (i: number) => setLines(lines.length > 1 ? lines.filter((_, j) => j !== i) : [emptyLine()]);
   const addLine = () => { setLines([...lines, emptyLine()]); setFocusIdx(lines.length); };
@@ -158,6 +161,7 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
     const payload = {
       customer: cust, lines: validLines.map((l) => ({ name: l.name.trim(), qty: num(l.qty) || 1, price: l.price.trim() === '' ? null : num(l.price), product_id: l.product_id ?? null, variant: l.variant.trim() || null, units_per_package: l.units_per_package || 1, unit_name: l.unit_name || 'adet', package_name: l.package_name || 'adet', unit_price: l.unit_price.trim() === '' ? null : num(l.unit_price) })),
       notes: f.notes, labels: f.labels, desi: f.desi, package_count: f.package_count, tax_rate: num(f.tax_rate), shipping_payer: f.shipping_payer, shipping_fee: f.shipping_fee,
+      discount_type: f.discount_type, discount_value: discountInput,
       payment_status: f.payment_status, payment_method: f.payment_method, source: f.source,
     };
     try {
@@ -310,6 +314,8 @@ export function OrderForm({ order, customer, prefillText }: { order?: OrderFull;
           <Card title="Özet">
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between text-neutral-600"><dt>Ara Toplam</dt><dd>{money(subtotal)}</dd></div>
+              <div className="flex items-center justify-between gap-2 text-neutral-600"><dt>İndirim</dt><dd className="flex items-center gap-2"><select aria-label="İndirim türü" value={f.discount_type} onChange={(e) => setF({ ...f, discount_type: e.target.value as 'percent' | 'amount' })} className="input w-28 py-1"><option value="percent">Yüzde</option><option value="amount">Tutar</option></select><input aria-label="İndirim değeri" value={f.discount_value} onChange={(e) => setF({ ...f, discount_value: e.target.value })} inputMode="decimal" placeholder="0" className="input w-24 py-1 text-right" /><span>{f.discount_type === 'percent' ? '%' : '₺'}</span></dd></div>
+              {discountAmount > 0 && <div className="flex justify-between text-emerald-700"><dt>İndirim tutarı</dt><dd>−{money(discountAmount)}</dd></div>}
               <div className="flex items-center justify-between gap-2 text-neutral-600"><dt>KDV</dt><dd className="flex items-center gap-2"><input value={f.tax_rate} onChange={(e) => setF({ ...f, tax_rate: e.target.value })} inputMode="decimal" className="input w-20 py-1 text-right" /><span>%</span></dd></div>
               <div className="flex items-center justify-between text-neutral-600"><dt>Kargo ücreti</dt><dd><input value={f.shipping_fee} onChange={(e) => setF({ ...f, shipping_fee: e.target.value })} inputMode="decimal" className="input w-28 py-1 text-right" /></dd></div>
               <div className="flex justify-between text-neutral-600"><dt>KDV tutarı</dt><dd>{money(tax)}</dd></div>

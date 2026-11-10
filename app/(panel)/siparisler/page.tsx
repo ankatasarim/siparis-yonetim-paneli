@@ -18,7 +18,7 @@ import type { OrderRow } from '@/lib/types';
 
 type SP = Record<string, string | undefined>;
 /** Sepet penceresine yalnızca gereken alanlar gider (satır verisi istemciye küçük kalsın). */
-const cart = (o: OrderRow) => ({ id: o.id, order_no: o.order_no, lines: o.lines, subtotal: o.subtotal, shipping_fee: o.shipping_fee, total: o.total, shipping_payer: o.shipping_payer, labels: o.labels });
+const cart = (o: OrderRow) => ({ id: o.id, order_no: o.order_no, lines: o.lines, subtotal: o.subtotal, discount_amount: o.discount_amount, shipping_fee: o.shipping_fee, total: o.total, shipping_payer: o.shipping_payer, labels: o.labels });
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
@@ -57,7 +57,22 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                 <p className="text-sm"><span className="font-semibold">#{o.order_no}</span> <span className="text-neutral-500">· {fmtShort(o.created_at)}</span></p>
                 <p className="truncate font-medium">{custName(o)}</p>
                 {o.customer_city && <p className="truncate text-xs text-neutral-500">İl: {o.customer_city}</p>}
-                <p className="truncate text-xs text-neutral-500">{o.items || '—'}</p>
+                <div className="mt-1.5 space-y-1.5">
+                  {o.lines.slice(0, 2).map((line, i) => (
+                    <div key={i} className="min-w-0 rounded-md bg-neutral-50 px-2 py-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="min-w-0 break-words text-xs font-medium leading-4 text-neutral-800">{line.name}</p>
+                        <span className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-right text-[11px] font-semibold leading-4 text-emerald-900">
+                          {line.qty} {line.package_name || 'adet'}
+                          {(line.units_per_package || 1) > 1 && <span className="block text-[10px] font-normal">{line.qty * (line.units_per_package || 1)} {line.unit_name || 'adet'}</span>}
+                        </span>
+                      </div>
+                      {line.variant && <p className="mt-1 break-words rounded border border-blue-200 bg-blue-50 px-1.5 py-1 text-[11px] leading-4 text-blue-900"><span className="font-semibold text-blue-700">Seçim: </span>{line.variant}</p>}
+                    </div>
+                  ))}
+                  {o.lines.length > 2 && <p className="text-[11px] font-medium text-neutral-500">+ {o.lines.length - 2} ürün daha</p>}
+                  {!o.lines.length && <p className="text-xs text-neutral-500">Ürün yok</p>}
+                </div>
               </Link>
               <div className="flex shrink-0 items-center gap-1"><CartPopup order={cart(o)} compact /><Link href={`/siparisler/${o.id}`} aria-label="Sipariş detayı"><ChevronRight className="h-4 w-4 text-neutral-400" /></Link></div>
             </div>

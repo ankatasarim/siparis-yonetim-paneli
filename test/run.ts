@@ -27,8 +27,20 @@ assert.equal(filterFinanceEntries(entries, '', 'all', 'Hizmet geliri').length, 1
 
 const totals = calcTotals([{ name: 'Hediye', qty: 2, price: 100, product_id: null, variant: null }], 10, 20);
 assert.equal(totals.subtotal, 200);
+assert.equal(totals.discount_amount, 0);
 assert.equal(totals.tax, 42);
 assert.equal(totals.total, 252);
+const percentDiscount = calcTotals([{ name: 'Hediye', qty: 2, price: 100 }], 10, 20, 'percent', 10);
+assert.equal(percentDiscount.discount_amount, 20);
+assert.equal(percentDiscount.tax, 38);
+assert.equal(percentDiscount.total, 228);
+const fixedDiscount = calcTotals([{ name: 'Hediye', qty: 2, price: 100 }], 10, 20, 'amount', 50);
+assert.equal(fixedDiscount.discount_amount, 50);
+assert.equal(fixedDiscount.tax, 32);
+assert.equal(fixedDiscount.total, 192);
+const cappedDiscount = calcTotals([{ name: 'Hediye', qty: 2, price: 100 }], 10, 0, 'amount', 250);
+assert.equal(cappedDiscount.discount_amount, 200);
+assert.equal(cappedDiscount.total, 10);
 const totalsWithoutShipping = calcTotals([{ name: 'Hediye', qty: 2, price: 100, product_id: null, variant: null }], 0, 20);
 assert.equal(totalsWithoutShipping.tax, 40);
 assert.equal(packagePrice(2.5, 25), 62.5);
@@ -139,6 +151,13 @@ async function testCustomerDeduplication() {
   const listedTaggedOrder = (await ordersService.list()).rows.find((order) => order.id === taggedOrder.id);
   assert.equal(listedTaggedOrder?.tag, 'acil', 'operational tags should be persisted and visible in order lists');
   assert.equal(listedTaggedOrder?.labels, 'Paketleme notu', 'operational tags must not replace product/personalization notes');
+  await ordersService.update(taggedOrder.id, { discount_type: 'percent', discount_value: 20 });
+  const discountedOrder = await ordersService.getRaw(taggedOrder.id);
+  assert.equal(discountedOrder?.discount_amount, 20, 'percentage discounts should be persisted as a calculated amount');
+  assert.equal(discountedOrder?.total, 80, 'discounted totals should be persisted');
+  await assert.rejects(() => ordersService.update(taggedOrder.id, { discount_value: 150 }), /Yüzde indirim 100 değerini aşamaz/);
+  await ordersService.update(taggedOrder.id, { discount_type: 'amount', discount_value: 150 });
+  assert.equal((await ordersService.getRaw(taggedOrder.id))?.discount_amount, 100, 'fixed discounts should not reduce merchandise below zero');
   await assert.rejects(() => ordersService.update(taggedOrder.id, { tag: 'gecersiz' }), /Geçersiz sipariş etiketi/);
   await ordersService.update(taggedOrder.id, { tag: '' });
   assert.equal((await ordersService.getRaw(taggedOrder.id))?.tag, '', 'operational tags should be clearable');

@@ -125,6 +125,9 @@ export interface Order {
   package_count: number;
   tax_rate: number;
   shipping_fee: number;
+  discount_type: 'percent' | 'amount';
+  discount_value: number;
+  discount_amount: number;
   subtotal: number;
   total: number;
   /** Sipariş kanalı (OrderSource); eski kayıtlarda serbest metin olabilir */

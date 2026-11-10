@@ -8,7 +8,7 @@ import { startNav } from '@/lib/client';
 import { SHIPPING_PAYERS } from '@/lib/constants';
 import type { Order } from '@/lib/types';
 
-type CartOrder = Pick<Order, 'id' | 'order_no' | 'lines' | 'subtotal' | 'shipping_fee' | 'total' | 'shipping_payer' | 'labels'>;
+type CartOrder = Pick<Order, 'id' | 'order_no' | 'lines' | 'subtotal' | 'discount_amount' | 'shipping_fee' | 'total' | 'shipping_payer' | 'labels'>;
 
 /**
  * Sipariş listesinde tutara tıklayınca açılan sepet penceresi. Düğme olduğu için satır bağlantısı (RowLink) tıklamayı yok sayar;
@@ -26,7 +26,30 @@ export function CartPopup({ order, compact = false }: { order: CartOrder; compac
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={<span className="flex items-center gap-2"><ShoppingCart className="h-4 w-4 text-neutral-500" />Sipariş #{order.order_no} · Sepet</span>}
         footer={<><button className="btn" onClick={() => setOpen(false)}>Kapat</button><Link href={`/siparisler/${order.id}`} onClick={() => startNav()} className="btn btn-primary"><ExternalLink className="h-3.5 w-3.5" />Siparişe git</Link></>}>
-        <div className="overflow-x-auto">
+        <div className="space-y-2.5 md:hidden">
+          {order.lines.map((l, i) => (
+            <article key={`mobile-${i}`} className="rounded-lg border border-neutral-200 bg-white p-3">
+              <p className="break-words text-sm font-semibold leading-5 text-neutral-900">{l.name}</p>
+              <div className="mt-2 grid grid-cols-1 gap-2">
+                {l.variant && <div className="min-w-0 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700">Seçilen varyasyon</p>
+                  <p className="mt-0.5 break-words text-sm font-semibold leading-5 text-blue-950">{l.variant}</p>
+                </div>}
+                <div className="min-w-0 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Miktar</p>
+                  <p className="mt-0.5 break-words text-sm font-bold leading-5 text-emerald-950">{l.qty} {l.package_name || 'adet'}</p>
+                  {(l.units_per_package || 1) > 1 && <p className="mt-0.5 text-[11px] text-emerald-800">{l.qty * (l.units_per_package || 1)} {l.unit_name || 'adet'} toplam</p>}
+                </div>
+              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-neutral-100 pt-2.5">
+                <div className="min-w-0"><dt className="text-[10px] font-medium text-neutral-500">Birim fiyat</dt><dd className="mt-0.5 break-words text-xs text-neutral-800">{l.price != null ? money(l.price) : '—'}</dd></div>
+                <div className="min-w-0 text-right"><dt className="text-[10px] font-medium text-neutral-500">Toplam</dt><dd className="mt-0.5 break-words text-xs font-semibold text-neutral-900">{l.price != null ? money(l.qty * l.price) : '—'}</dd></div>
+              </dl>
+            </article>
+          ))}
+          {!order.lines.length && <p className="py-3 text-sm text-neutral-400">Ürün satırı yok</p>}
+        </div>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full">
             <thead><tr><th className="th">Ürün</th><th className="th w-20 text-right">Miktar</th><th className="th w-24 text-right">Satış fiyatı</th><th className="th w-24 text-right">Toplam</th></tr></thead>
             <tbody>
@@ -44,6 +67,7 @@ export function CartPopup({ order, compact = false }: { order: CartOrder; compac
         </div>
         <dl className="mt-3 space-y-1.5 border-t border-neutral-100 pt-3 text-sm">
           <div className="flex justify-between text-neutral-600"><dt>Ara toplam ({count} ürün)</dt><dd>{money(order.subtotal)}</dd></div>
+          {order.discount_amount > 0 && <div className="flex justify-between text-emerald-700"><dt>İndirim</dt><dd>−{money(order.discount_amount)}</dd></div>}
           <div className="flex justify-between text-neutral-600"><dt>Kargo · {SHIPPING_PAYERS[order.shipping_payer]}</dt><dd>{money(order.shipping_fee)}</dd></div>
           <div className="flex justify-between border-t border-neutral-100 pt-2 text-base font-semibold"><dt>Toplam</dt><dd>{money(order.total)}</dd></div>
         </dl>

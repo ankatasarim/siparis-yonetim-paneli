@@ -68,7 +68,31 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </Card>
 
           <Card pad={false} title={<><StatusPill status={o.status} /><span className="hidden sm:inline">{STATUSES[o.status].label}</span> <span className="font-normal text-neutral-500">({count} ürün)</span></>} actions={<Link href={`/siparisler/${o.id}/duzenle`} className="btn btn-sm"><Pencil className="h-3.5 w-3.5" />Ürünleri düzenle</Link>}>
-            <div className="overflow-x-auto">
+            <div className="space-y-2.5 px-3 py-3 md:hidden">
+              {o.lines.map((l, i) => (
+                <article key={`mobile-${i}`} className="rounded-lg border border-neutral-200 bg-white p-3">
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-semibold leading-5 text-neutral-900">{l.name}</p>
+                    <div className="mt-2 grid grid-cols-1 gap-2">
+                      {l.variant && <div className="min-w-0 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700">Seçilen varyasyon</p>
+                        <p className="mt-0.5 break-words text-sm font-semibold leading-5 text-blue-950">{l.variant}</p>
+                      </div>}
+                      <div className="min-w-0 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">Miktar</p>
+                        <p className="mt-0.5 break-words text-sm font-bold leading-5 text-emerald-950">{l.qty} {l.package_name || 'adet'}</p>
+                        {(l.units_per_package || 1) > 1 && <p className="mt-0.5 text-[11px] text-emerald-800">{l.qty * (l.units_per_package || 1)} {l.unit_name || 'adet'} toplam</p>}
+                      </div>
+                    </div>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-neutral-100 pt-2.5">
+                    <div className="min-w-0"><dt className="text-[10px] font-medium text-neutral-500">Birim fiyat</dt><dd className="mt-0.5 break-words text-xs text-neutral-800">{l.price != null ? money(l.price) : '—'}</dd></div>
+                    <div className="min-w-0 text-right"><dt className="text-[10px] font-medium text-neutral-500">Toplam</dt><dd className="mt-0.5 break-words text-xs font-semibold text-neutral-900">{l.price != null ? money(l.qty * l.price) : '—'}</dd></div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full">
                 <thead><tr><th className="th">Ürün</th><th className="th w-20 text-right sm:w-24">Miktar</th><th className="th w-24 text-right sm:w-28">Satış fiyatı</th><th className="th w-24 text-right sm:w-32">Toplam</th></tr></thead>
                 <tbody>
@@ -97,7 +121,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <p className="mt-1"><SourcePill source={o.source} /></p>
             <dl className="mt-4 space-y-2 border-t border-neutral-100 pt-3 text-sm">
               <div className="flex justify-between text-neutral-600"><dt>Ara Toplam</dt><dd>{money(o.subtotal)}</dd></div>
-              <div className="flex justify-between text-neutral-600"><dt>KDV ({o.tax_rate || 0}%)</dt><dd>{money((o.subtotal + (o.shipping_fee || 0)) * ((o.tax_rate || 0) / 100))}</dd></div>
+              {o.discount_amount > 0 && <div className="flex justify-between text-emerald-700"><dt>İndirim {o.discount_type === 'percent' ? `(%${o.discount_value})` : ''}</dt><dd>−{money(o.discount_amount)}</dd></div>}
+              <div className="flex justify-between text-neutral-600"><dt>KDV ({o.tax_rate || 0}%)</dt><dd>{money((o.subtotal - (o.discount_amount || 0) + (o.shipping_fee || 0)) * ((o.tax_rate || 0) / 100))}</dd></div>
               <div className="flex justify-between text-neutral-600"><dt>{o.shipping_payer === 'alici' ? 'Kargo (alıcı öder)' : 'Kargo'}</dt><dd>{money(o.shipping_fee)}</dd></div>
               <div className="flex justify-between border-t border-neutral-100 pt-2 text-base font-semibold"><dt>Toplam</dt><dd>{money(o.total)}</dd></div>
             </dl>
