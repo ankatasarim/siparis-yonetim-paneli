@@ -1,8 +1,12 @@
 'use client';
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
-import { FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet, ArrowRightLeft } from 'lucide-react';
 import { Spinner } from '@/components/Loading';
 import { useToast } from '@/components/Toast';
+import { Modal } from '@/components/Modal';
+import { ALL_STATUSES, STATUSES } from '@/lib/constants';
+import { useRouter } from 'next/navigation';
+import type { OrderStatus } from '@/lib/types';
 
 type SelectionContextValue = {
   selected: number[];
@@ -85,5 +89,63 @@ export function SelectedOrdersExportButton() {
       {loading ? <Spinner /> : <FileSpreadsheet className="h-4 w-4" />}
       <span>Seçilenleri Excel indir{selected.length ? ` (${selected.length})` : ''}</span>
     </button>
+  );
+}
+
+export function SelectedOrdersStatusButton() {
+  const { selected, clear } = useOrderSelection();
+  const { toast } = useToast();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<OrderStatus>('hazirlaniyor');
+  const [loading, setLoading] = useState(false);
+
+  const apply = async () => {
+    if (!selected.length) return;
+    setLoading(true);
+    try {
+      const response = await fetch('/api/orders/bulk-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selected, status: pendingStatus, force: true }),
+        cache: 'no-store',
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || `Durum değişikliği başarısız (${response.status})`);
+      }
+      toast(`${selected.length} seçili sipariş ${STATUSES[pendingStatus].label} olarak güncellendi`, 'ok');
+      clear();
+      setOpen(false);
+      router.refresh();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Siparişler güncellenemedi', 'err');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <button onClick={() => setOpen(true)} disabled={selected.length === 0 || loading} className="btn" title="Seçili siparişlerin durumunu toplu güncelle">
+        {loading ? <Spinner /> : <ArrowRightLeft className="h-4 w-4" />}
+        <span>Toplu durum değiştir{selected.length ? ` (${selected.length})` : ''}</span>
+      </button>
+
+      <Modal open={open} onClose={() => setOpen(false)} title="Seçili siparişlerin durumunu değiştir" footer={<>
+        <button className="btn" onClick={() => setOpen(false)} disabled={loading}>Vazgeç</button>
+        <button className="btn btn-primary" onClick={apply} disabled={loading || selected.length === 0}>Güncelle</button>
+      </>}> 
+        <div className="space-y-3">
+          <p className="text-sm text-neutral-600">{selected.length} siparişin yeni durumunu seçin.</p>
+          <label className="block text-sm font-medium">
+            Durum
+            <select value={pendingStatus} onChange={(e) => setPendingStatus(e.target.value as OrderStatus)} className="input mt-1" aria-label="Yeni durum seç">
+              {ALL_STATUSES.map((status) => <option key={status} value={status}>{STATUSES[status].label}</option>)}
+            </select>
+          </label>
+        </div>
+      </Modal>
+    </>
   );
 }

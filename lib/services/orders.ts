@@ -417,6 +417,26 @@ export async function remove(id: number | string): Promise<boolean> {
   return true;
 }
 
+export async function setStatuses(ids: Array<number | string>, status: OrderStatus, opts: { note?: string; by?: string; force?: boolean } = {}): Promise<OrderFull[]> {
+  const seen = new Set<string>();
+  const uniqueIds: Array<number | string> = [];
+  for (const id of ids) {
+    const key = String(id);
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueIds.push(id);
+    }
+  }
+  if (!uniqueIds.length) return [];
+
+  const result: OrderFull[] = [];
+  const bulkOptions = { ...opts, force: opts.force ?? true };
+  for (const id of uniqueIds) {
+    result.push(await setStatus(id, status, bulkOptions));
+  }
+  return result;
+}
+
 export async function setStatus(id: number | string, status: OrderStatus, opts: { note?: string; by?: string; force?: boolean } = {}): Promise<OrderFull> {
   const order = await getRaw(id);
   if (!order) throw httpError(404, 'Sipariş bulunamadı');

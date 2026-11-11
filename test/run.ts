@@ -163,6 +163,24 @@ async function testCustomerDeduplication() {
   assert.equal((await ordersService.getRaw(taggedOrder.id))?.tag, '', 'operational tags should be clearable');
 }
 
+async function testBulkStatusUpdate() {
+  await db.ready({ memory: true });
+  const store = db.store();
+  const first = await store.insert<{ id: number }>('orders', {
+    order_no: 1000000, customer_id: 1, status: 'yeni', lines_json: '[]',
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  });
+  const second = await store.insert<{ id: number }>('orders', {
+    order_no: 1000001, customer_id: 1, status: 'hazirlaniyor', lines_json: '[]',
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  });
+
+  const updated = await ordersService.setStatuses([first.id, second.id], 'hazirlandi', { by: 'test' });
+  assert.deepEqual(updated.map((order) => order.status).sort(), ['hazirlandi', 'hazirlandi']);
+  assert.equal((await ordersService.getRaw(first.id))?.status, 'hazirlandi');
+  assert.equal((await ordersService.getRaw(second.id))?.status, 'hazirlandi');
+}
+
 async function testInventoryLifecycle() {
   await db.ready({ memory: true });
   const store = db.store();
@@ -268,6 +286,11 @@ async function testInventoryLifecycle() {
 }
 
 testCustomerDeduplication().then(() => console.log('customer deduplication tests passed')).catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
+
+testBulkStatusUpdate().then(() => console.log('bulk status update tests passed')).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
