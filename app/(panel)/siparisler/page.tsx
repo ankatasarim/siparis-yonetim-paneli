@@ -26,7 +26,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const durum = sp.durum || '';
   const q = sp.q || '';
   const odeme = sp.odeme || '';
-  const { rows, total, page, pageSize } = await orders.list({ status: durum, q, payment_status: odeme, page: Number(sp.sayfa) || 1, pageSize: 20 });
+  const requestedPageSize = Number(sp.adet);
+  const pageSize = [10, 20, 50, 100, 200].includes(requestedPageSize) ? requestedPageSize : 20;
+  const { rows, total, page } = await orders.list({ status: durum, q, payment_status: odeme, page: Number(sp.sayfa) || 1, pageSize });
+  const paginationParams = { durum, q, odeme, adet: String(pageSize) };
   const custName = (o: (typeof rows)[number]) => o.customer_name || (o.customer_ig ? '@' + o.customer_ig : 'İsimsiz müşteri');
   const empty = (
     <Empty icon={<Package className="mx-auto h-8 w-8 text-neutral-300" />} title="Sipariş bulunamadı" text={q || durum || odeme ? 'Filtreleri değiştirip tekrar deneyin.' : 'İlk siparişinizi oluşturun.'} action={!q && !durum && !odeme ? <Link href="/siparisler/yeni" className="btn btn-primary">Sipariş Oluştur</Link> : undefined} />
@@ -72,7 +75,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           </div>
         ))}
         {!rows.length && <div className="card">{empty}</div>}
-        <div className="card"><Pagination total={total} page={page} pageSize={pageSize} basePath="/siparisler" params={{ durum, q, odeme }} label="Sipariş" /></div>
+        <div className="card"><Pagination total={total} page={page} pageSize={pageSize} basePath="/siparisler" params={paginationParams} label="Sipariş" /></div>
       </div>
 
       {/* Masaüstü: tablo */}
@@ -124,7 +127,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           </table>
         </div>
         <div className="border-t border-neutral-100">
-          <Pagination total={total} page={page} pageSize={pageSize} basePath="/siparisler" params={{ durum, q, odeme }} label="Sipariş" />
+          <Pagination total={total} page={page} pageSize={pageSize} basePath="/siparisler" params={paginationParams} label="Sipariş" />
         </div>
       </div>
     </>
