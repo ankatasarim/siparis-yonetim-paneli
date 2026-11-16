@@ -9,7 +9,7 @@ import { PaymentPill, SourcePill } from '@/components/Pills';
 import { StatusMenu } from '@/components/orders/StatusMenu';
 import { OrderTagMenu } from '@/components/orders/OrderTagMenu';
 import { PoregoExportButton } from '@/components/orders/PoregoExportButton';
-import { OrderSelectCheckbox, OrderSelectionProvider, SelectedOrdersExportButton, SelectedOrdersStatusButton } from '@/components/orders/OrderSelection';
+import { OrderSelectAllCheckbox, OrderSelectCheckbox, OrderSelectionProvider, SelectedOrdersExportButton, SelectedOrdersStatusButton } from '@/components/orders/OrderSelection';
 import { CartPopup } from '@/components/orders/CartPopup';
 import { Empty } from '@/components/ui';
 import { SATISFACTION_LABELS, SHIPPING_COMPANIES, SHIPPING_PAYERS } from '@/lib/constants';
@@ -52,6 +52,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <OrdersToolbar />
 
       {/* Mobil: kart listesi */}
+      {rows.length > 0 && <label className="flex items-center gap-2 px-1 text-sm text-neutral-600 md:hidden">
+        <OrderSelectAllCheckbox ids={rows.map((o) => o.id)} />
+        Bu sayfadaki tüm siparişleri seç
+      </label>}
       <div className="space-y-3 md:hidden">
         {rows.map((o) => (
           <div key={o.id} className="card px-4 py-3">
@@ -84,7 +88,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           <table className="w-full min-w-[980px]">
             <thead>
               <tr>
-                <th className="th w-10"><span className="sr-only">Seç</span></th>
+                <th className="th w-10"><OrderSelectAllCheckbox ids={rows.map((o) => o.id)} /></th>
                 <th className="th">Sipariş</th>
                 <th className="th">Tarih</th>
                 <th className="th">Müşteri</th>

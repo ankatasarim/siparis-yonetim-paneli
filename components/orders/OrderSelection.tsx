@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { FileSpreadsheet, ArrowRightLeft } from 'lucide-react';
 import { Spinner } from '@/components/Loading';
 import { useToast } from '@/components/Toast';
@@ -11,6 +11,7 @@ import type { OrderStatus } from '@/lib/types';
 type SelectionContextValue = {
   selected: number[];
   toggle: (id: number) => void;
+  toggleMany: (ids: number[]) => void;
   clear: () => void;
 };
 
@@ -21,6 +22,13 @@ export function OrderSelectionProvider({ children }: { children: ReactNode }) {
   const value = useMemo<SelectionContextValue>(() => ({
     selected,
     toggle: (id) => setSelected((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id]),
+    toggleMany: (ids) => setSelected((current) => {
+      if (ids.length > 0 && ids.every((id) => current.includes(id))) {
+        const visible = new Set(ids);
+        return current.filter((id) => !visible.has(id));
+      }
+      return [...new Set([...current, ...ids])];
+    }),
     clear: () => setSelected([]),
   }), [selected]);
 
@@ -43,6 +51,32 @@ export function OrderSelectCheckbox({ id, orderNo }: { id: number; orderNo: numb
       onChange={() => toggle(id)}
       onClick={(event) => event.stopPropagation()}
       className="h-4 w-4 shrink-0 rounded border-neutral-300 text-primary"
+    />
+  );
+}
+
+export function OrderSelectAllCheckbox({ ids, className = '' }: { ids: number[]; className?: string }) {
+  const { selected, toggleMany } = useOrderSelection();
+  const checkbox = useRef<HTMLInputElement>(null);
+  const selectedCount = ids.filter((id) => selected.includes(id)).length;
+  const allSelected = ids.length > 0 && selectedCount === ids.length;
+  const partiallySelected = selectedCount > 0 && !allSelected;
+
+  useEffect(() => {
+    if (checkbox.current) checkbox.current.indeterminate = partiallySelected;
+  }, [partiallySelected]);
+
+  return (
+    <input
+      ref={checkbox}
+      type="checkbox"
+      aria-label="Bu sayfadaki tüm siparişleri seç"
+      title="Bu sayfadaki tüm siparişleri seç"
+      checked={allSelected}
+      disabled={ids.length === 0}
+      onChange={() => toggleMany(ids)}
+      onClick={(event) => event.stopPropagation()}
+      className={`h-4 w-4 shrink-0 rounded border-neutral-300 text-primary ${className}`}
     />
   );
 }
