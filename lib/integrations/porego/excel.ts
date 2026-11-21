@@ -67,7 +67,7 @@ function toRow({ order, customer }: ExportItem): (string | number | null)[] {
     lastName,
     customer.phone || '',
     customer.email || '',
-    'Boş kutu',
+    'Ürün',
     1,
     0,
     1,
