@@ -1,6 +1,6 @@
 import * as db from '../db';
 import { cfg } from '../config';
-import { eq, gt, ilike, isIn, isNull, isUniqueViolation, lt, or, type Cond, type Row, type Where } from '../store';
+import { eq, gte, gt, ilike, isIn, isNull, isUniqueViolation, lt, or, type Cond, type Row, type Where } from '../store';
 import { httpError, now, normalizeTr, pick, round2, toNumber } from '../utils';
 import { STATUSES, ACTIVE_STATUSES, PAYMENT_STATUSES, SHIPPING_PAYERS, SHIPPING_COMPANIES, SATISFACTION_LABELS, ORDER_SOURCES, ORDER_TAGS, DEFAULT_SOURCE, ACCOUNT_PAYMENT_METHOD, trackingUrl } from '../constants';
 import * as dhl from '../integrations/dhl';
@@ -211,11 +211,48 @@ export interface ListOpts {
   status?: string | null;
   statuses?: OrderStatus[] | null;
   payment_status?: string | null;
+  source?: string | null;
+  shipping_payer?: string | null;
+  tag?: string | null;
+  date_preset?: string | null;
+  date_from?: string | null;
+  date_to?: string | null;
   q?: string | null;
   customer_id?: number | string | null;
   page?: number;
   pageSize?: number;
+  includeSumTotal?: boolean;
 }
+
+function validDateKey(value?: string | null): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function istanbulDateKey(): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+function shiftDateKey(value: string, days: number): string {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function shiftMonthKey(value: string, months: number): string {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  date.setUTCDate(Math.min(day, lastDay));
+  return date.toISOString().slice(0, 10);
+}
+
+const istanbulDayStart = (value: string) => new Date(`${value}T00:00:00+03:00`).toISOString();
 
 /** Sipariş satırlarına müşteri özet alanlarını ekler. */
 async function attachCustomers(rows: Row[]): Promise<OrderRow[]> {
@@ -232,13 +269,26 @@ async function attachCustomers(rows: Row[]): Promise<OrderRow[]> {
   });
 }
 
-export async function list(opts: ListOpts = {}): Promise<{ rows: OrderRow[]; total: number; page: number; pageSize: number }> {
+export async function list(opts: ListOpts = {}): Promise<{ rows: OrderRow[]; total: number; page: number; pageSize: number; sumTotal: number }> {
   const where: Where[] = [];
   if (opts.status && STATUSES[opts.status as OrderStatus]) where.push(eq('status', opts.status));
   if (opts.statuses && opts.statuses.length) where.push(isIn('status', opts.statuses));
   if (opts.payment_status && PAYMENT_STATUSES[opts.payment_status as PaymentStatus]) where.push(eq('payment_status', opts.payment_status));
+  if (opts.source && Object.hasOwn(ORDER_SOURCES, opts.source)) where.push(eq('source', opts.source));
+  if (opts.shipping_payer && Object.hasOwn(SHIPPING_PAYERS, opts.shipping_payer)) where.push(eq('shipping_payer', opts.shipping_payer));
+  if (opts.tag && Object.hasOwn(ORDER_TAGS, opts.tag)) where.push(eq('tag', opts.tag));
+  let dateFrom = validDateKey(opts.date_from) ? opts.date_from : '';
+  let dateTo = validDateKey(opts.date_to) ? opts.date_to : '';
+  if (opts.date_preset && opts.date_preset !== 'ozel') {
+    const today = istanbulDateKey();
+    if (opts.date_preset === 'bugun') dateFrom = dateTo = today;
+    if (opts.date_preset === 'hafta') { dateFrom = shiftDateKey(today, -6); dateTo = today; }
+    if (opts.date_preset === 'ay') { dateFrom = shiftMonthKey(today, -1); dateTo = today; }
+  }
+  if (dateFrom) where.push(gte('created_at', istanbulDayStart(dateFrom)));
+  if (dateTo) where.push(lt('created_at', istanbulDayStart(shiftDateKey(dateTo, 1))));
   if (opts.customer_id) {
-    if (!validId(opts.customer_id)) return { rows: [], total: 0, page: 1, pageSize: 20 };
+    if (!validId(opts.customer_id)) return { rows: [], total: 0, page: 1, pageSize: 20, sumTotal: 0 };
     where.push(eq('customer_id', Number(opts.customer_id)));
   }
   if (opts.q && String(opts.q).trim()) {
@@ -254,8 +304,13 @@ export async function list(opts: ListOpts = {}): Promise<{ rows: OrderRow[]; tot
   }
   const pageSize = Math.min(200, Math.max(1, Number(opts.pageSize) || 20));
   const page = Math.max(1, Number(opts.page) || 1);
-  const { rows, count } = await S().select({ table: 'orders', where, order: [{ col: 'id', asc: false }], limit: pageSize, offset: (page - 1) * pageSize, count: true });
-  return { rows: await attachCustomers(rows), total: count ?? rows.length, page, pageSize };
+  const [result, matchingOrders] = await Promise.all([
+    S().select({ table: 'orders', where, order: [{ col: 'id', asc: false }], limit: pageSize, offset: (page - 1) * pageSize, count: true }),
+    opts.includeSumTotal ? db.selectAll<{ total: number | null }>({ table: 'orders', columns: ['total'], where }, 1000, 50000) : Promise.resolve([]),
+  ]);
+  const { rows, count } = result;
+  const sumTotal = Math.round(matchingOrders.reduce((sum, order) => sum + (Number(order.total) || 0), 0) * 100) / 100;
+  return { rows: await attachCustomers(rows), total: count ?? rows.length, page, pageSize, sumTotal };
 }
 
 /** DHL toplu gönderi dosyası için siparişler + müşterileri (sipariş numarasına göre sıralı). */

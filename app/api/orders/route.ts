@@ -7,7 +7,7 @@ export const GET = api((req) => {
   const sp = req.nextUrl.searchParams;
   const st = sp.get('durum') || sp.get('status');
   const statuses = st ? (st.split(',').filter((s) => STATUSES[s as OrderStatus]) as OrderStatus[]) : null;
-  return orders.list({ statuses, q: sp.get('q'), customer_id: sp.get('customer_id'), payment_status: sp.get('odeme'), page: Number(sp.get('sayfa') || sp.get('page') || 1), pageSize: Number(sp.get('adet') || sp.get('pageSize') || 20) });
+  return orders.list({ statuses, q: sp.get('q'), customer_id: sp.get('customer_id'), payment_status: sp.get('odeme'), source: sp.get('kanal'), shipping_payer: sp.get('kargo'), tag: sp.get('etiket'), date_preset: sp.get('tarih'), date_from: sp.get('baslangic'), date_to: sp.get('bitis'), page: Number(sp.get('sayfa') || sp.get('page') || 1), pageSize: Number(sp.get('adet') || sp.get('pageSize') || 20) });
 });
 
 export const POST = api(async (req) => {

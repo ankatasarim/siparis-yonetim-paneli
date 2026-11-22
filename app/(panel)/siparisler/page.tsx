@@ -13,7 +13,7 @@ import { OrderSelectAllCheckbox, OrderSelectCheckbox, OrderSelectionProvider, Se
 import { CartPopup } from '@/components/orders/CartPopup';
 import { Empty } from '@/components/ui';
 import { SATISFACTION_LABELS, SHIPPING_COMPANIES, SHIPPING_PAYERS } from '@/lib/constants';
-import { fmtDay, fmtTime, fmtShort, trunc } from '@/lib/format';
+import { fmtDay, fmtTime, fmtShort, money, trunc } from '@/lib/format';
 import type { OrderRow } from '@/lib/types';
 
 type SP = Record<string, string | undefined>;
@@ -26,13 +26,19 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const durum = sp.durum || '';
   const q = sp.q || '';
   const odeme = sp.odeme || '';
+  const kanal = sp.kanal || '';
+  const kargo = sp.kargo || '';
+  const etiket = sp.etiket || '';
+  const tarih = sp.tarih || '';
+  const baslangic = sp.baslangic || '';
+  const bitis = sp.bitis || '';
   const requestedPageSize = Number(sp.adet);
   const pageSize = [10, 20, 50, 100, 200].includes(requestedPageSize) ? requestedPageSize : 20;
-  const { rows, total, page } = await orders.list({ status: durum, q, payment_status: odeme, page: Number(sp.sayfa) || 1, pageSize });
-  const paginationParams = { durum, q, odeme, adet: String(pageSize) };
+  const { rows, total, page, sumTotal } = await orders.list({ status: durum, q, payment_status: odeme, source: kanal, shipping_payer: kargo, tag: etiket, date_preset: tarih, date_from: baslangic, date_to: bitis, page: Number(sp.sayfa) || 1, pageSize, includeSumTotal: true });
+  const paginationParams = { durum, q, odeme, kanal, kargo, etiket, tarih, baslangic, bitis, adet: String(pageSize) };
   const custName = (o: (typeof rows)[number]) => o.customer_name || (o.customer_ig ? '@' + o.customer_ig : 'İsimsiz müşteri');
   const empty = (
-    <Empty icon={<Package className="mx-auto h-8 w-8 text-neutral-300" />} title="Sipariş bulunamadı" text={q || durum || odeme ? 'Filtreleri değiştirip tekrar deneyin.' : 'İlk siparişinizi oluşturun.'} action={!q && !durum && !odeme ? <Link href="/siparisler/yeni" className="btn btn-primary">Sipariş Oluştur</Link> : undefined} />
+    <Empty icon={<Package className="mx-auto h-8 w-8 text-neutral-300" />} title="Sipariş bulunamadı" text={q || durum || odeme || kanal || kargo || etiket || tarih || baslangic || bitis ? 'Filtreleri değiştirip tekrar deneyin.' : 'İlk siparişinizi oluşturun.'} action={!q && !durum && !odeme && !kanal && !kargo && !etiket && !tarih && !baslangic && !bitis ? <Link href="/siparisler/yeni" className="btn btn-primary">Sipariş Oluştur</Link> : undefined} />
   );
 
   return (
@@ -79,6 +85,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           </div>
         ))}
         {!rows.length && <div className="card">{empty}</div>}
+        {rows.length > 0 && <div className="card flex items-center justify-between gap-3 px-4 py-3 text-sm">
+          <span className="text-neutral-600">Filtre sonucu <strong className="text-neutral-900">{total}</strong> sipariş</span>
+          <span className="text-right text-neutral-600">Toplam tutar <strong className="ml-1 text-base text-neutral-900">{money(sumTotal)}</strong></span>
+        </div>}
         <div className="card"><Pagination total={total} page={page} pageSize={pageSize} basePath="/siparisler" params={paginationParams} label="Sipariş" /></div>
       </div>
 
@@ -128,6 +138,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               })}
               {!rows.length && <tr><td colSpan={11} className="td">{empty}</td></tr>}
             </tbody>
+            {rows.length > 0 && <tfoot>
+              <tr className="border-t-2 border-neutral-200 bg-neutral-50 font-medium">
+                <td className="td text-neutral-600" colSpan={7}>Filtre sonucu: {total} sipariş</td>
+                <td className="td whitespace-nowrap font-semibold">{money(sumTotal)}</td>
+                <td className="td text-xs text-neutral-500" colSpan={3}>Toplam tutar</td>
+              </tr>
+            </tfoot>}
           </table>
         </div>
         <div className="border-t border-neutral-100">

@@ -144,13 +144,16 @@ async function testCustomerDeduplication() {
 
   const taggedOrder = await db.store().insert<{ id: number }>('orders', {
     order_no: 999999, customer_id: formatted.id, status: 'yeni', lines_json: JSON.stringify([{ name: 'Etiket testi', qty: 1, price: 100 }]),
-    labels: 'Paketleme notu', created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    source: 'instagram', shipping_payer: 'alici', total: 100, labels: 'Paketleme notu', created_at: '2026-10-15T12:00:00.000Z', updated_at: new Date().toISOString(),
   });
   assert.equal((await ordersService.getRaw(taggedOrder.id))?.tag, '', 'new orders should start without an operational tag');
   await ordersService.update(taggedOrder.id, { tag: 'acil' });
   const listedTaggedOrder = (await ordersService.list()).rows.find((order) => order.id === taggedOrder.id);
   assert.equal(listedTaggedOrder?.tag, 'acil', 'operational tags should be persisted and visible in order lists');
   assert.equal(listedTaggedOrder?.labels, 'Paketleme notu', 'operational tags must not replace product/personalization notes');
+  const filteredOrders = await ordersService.list({ source: 'instagram', shipping_payer: 'alici', tag: 'acil', date_preset: 'ozel', date_from: '2026-10-15', date_to: '2026-10-15', includeSumTotal: true });
+  assert.ok(filteredOrders.rows.some((order) => order.id === taggedOrder.id), 'channel, shipping payer, tag, and custom date filters should combine');
+  assert.equal(filteredOrders.sumTotal, 100, 'filtered total should include matching orders across the full result set');
   await ordersService.update(taggedOrder.id, { discount_type: 'percent', discount_value: 20 });
   const discountedOrder = await ordersService.getRaw(taggedOrder.id);
   assert.equal(discountedOrder?.discount_amount, 20, 'percentage discounts should be persisted as a calculated amount');
