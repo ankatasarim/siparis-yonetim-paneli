@@ -10,7 +10,8 @@ export const STATUSES: Record<OrderStatus, { label: string; next: OrderStatus[];
   hazirlaniyor:    { label: 'Hazırlanıyor',    next: ['hazirlandi', 'kargoya_verildi', 'iptal'], pill: 'border-amber-300 text-amber-700 bg-amber-50',     dot: 'bg-amber-500' },
   hazirlandi:      { label: 'Hazırlandı',      next: ['kargoya_verildi', 'iptal'], pill: 'border-cyan-300 text-cyan-700 bg-cyan-50',           dot: 'bg-cyan-500' },
   kargoya_verildi: { label: 'Kargoya Verildi', next: ['teslim_edildi', 'iptal'],   pill: 'border-violet-300 text-violet-700 bg-violet-50',  dot: 'bg-violet-500' },
-  teslim_edildi:   { label: 'Teslim Edildi',   next: [],                           pill: 'border-neutral-300 text-neutral-700 bg-white',    dot: 'bg-emerald-500' },
+  teslim_edildi:   { label: 'Teslim Edildi',   next: ['iade'],                     pill: 'border-neutral-300 text-neutral-700 bg-white',    dot: 'bg-emerald-500' },
+  iade:            { label: 'İade',            next: [],                           pill: 'border-orange-300 text-orange-700 bg-orange-50', dot: 'bg-orange-500' },
   iptal:           { label: 'İptal',           next: [],                           pill: 'border-red-300 text-red-700 bg-red-50',           dot: 'bg-red-500' },
 };
 

@@ -27,7 +27,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const igOk = await instagram.isConfigured();
   const c = o.customer;
   const count = o.lines.reduce((s, l) => s + l.qty, 0);
-  const closed = o.status === 'teslim_edildi' || o.status === 'iptal';
+  const closed = ['teslim_edildi', 'iade', 'iptal'].includes(o.status);
   const custName = c.name || (c.ig_username ? '@' + c.ig_username : 'İsimsiz müşteri');
   const navBtn = 'btn btn-dark hidden sm:inline-flex';
 

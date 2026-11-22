@@ -229,6 +229,11 @@ async function testInventoryLifecycle() {
   stock = (await store.select<{ stock_on_hand: number; stock_reserved: number }>({ table: 'products', where: [{ col: 'id', op: 'eq', val: product.id }], limit: 1 })).rows[0];
   assert.equal(stock.stock_reserved, 0, 'shipment should consume the reservation');
   assert.equal(stock.stock_on_hand, 4, 'shipment should deduct base units exactly once');
+  await store.update('orders', [{ col: 'id', op: 'eq', val: order.id }], { status: 'iade' });
+  await inventory.syncOrder(order.id);
+  await inventory.syncOrder(order.id);
+  stock = (await store.select<{ stock_on_hand: number; stock_reserved: number }>({ table: 'products', where: [{ col: 'id', op: 'eq', val: product.id }], limit: 1 })).rows[0];
+  assert.equal(stock.stock_on_hand, 10, 'return should restore consumed stock exactly once');
 
   const paint = await store.insert<{ id: number }>('products', {
     name: 'Akrilik boya', inventory_enabled: 1, options_json: JSON.stringify([{ name: 'Renk', values: ['Kırmızı', 'Mavi'] }]),

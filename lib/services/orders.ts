@@ -454,7 +454,7 @@ export async function setStatus(id: number | string, status: OrderStatus, opts: 
     patch.closed_at = t;
     if (order.dhl_tracking_no && order.dhl_status !== 'delivered') { patch.dhl_status = 'delivered'; patch.dhl_status_text = 'Teslim edildi'; }
   }
-  if (status === 'iptal') patch.closed_at = t;
+  if (status === 'iptal' || status === 'iade') patch.closed_at = t;
   await S().update('orders', [eq('id', order.id)], patch);
   try { await inventory.syncOrder(order.id); }
   catch (e) {
@@ -463,9 +463,9 @@ export async function setStatus(id: number | string, status: OrderStatus, opts: 
   }
   const by = opts.by || 'panel';
   await addEvent(order.id, 'durum', `${from.label} → ${STATUSES[status].label}${opts.note ? ' · ' + opts.note : ''}`, { from: order.status, to: status, by });
-  if (status === 'iptal' && order.payment_method === ACCOUNT_PAYMENT_METHOD) {
+  if ((status === 'iptal' || status === 'iade') && order.payment_method === ACCOUNT_PAYMENT_METHOD) {
     await S().remove('account_transactions', [eq('order_id', order.id)]);
-    await addEvent(order.id, 'cari', 'İptal edilen siparişin cari borç hareketi kaldırıldı');
+    await addEvent(order.id, 'cari', `${status === 'iade' ? 'İade edilen' : 'İptal edilen'} siparişin cari borç hareketi kaldırıldı`);
   }
   // DHL API ile oluşturulmuş sipariş (referans + DHL sipariş kaydı) iptal edilince DHL tarafında da iptal dene; başarısızlık akışı durdurmaz.
   if (status === 'iptal' && order.dhl_tracking_no && order.dhl_shipment_ref && dhl.canCreate()) {
@@ -487,7 +487,7 @@ export async function recordShipment(id: number | string, { company, tracking_no
   if (!order) throw httpError(404, 'Sipariş bulunamadı');
   const tracking = String(tracking_no || '').replace(/\s+/g, '').trim();
   if (!SHIPPING_COMPANIES[company]) throw httpError(400, 'Geçersiz kargo şirketi');
-  if (['iptal', 'teslim_edildi'].includes(order.status)) throw httpError(400, 'Bu sipariş için kargo kaydı yapılamaz');
+  if (['iptal', 'teslim_edildi', 'iade'].includes(order.status)) throw httpError(400, 'Bu sipariş için kargo kaydı yapılamaz');
   if (company !== 'elden_teslim' && order.status === 'yeni') await setStatus(id, 'hazirlaniyor', { by: by || 'panel', note: 'Kargo kaydı ile otomatik' });
   const patch: Record<string, unknown> = {
     shipping_company: company,
@@ -587,9 +587,9 @@ export async function dashboard(): Promise<Dashboard> {
   for (const o of all) {
     if (counts[o.status] != null) counts[o.status] += 1;
     if (o.created_at >= today) today_count += 1;
-    if (o.created_at >= month && o.status !== 'iptal') { month_count += 1; month_revenue += Number(o.total) || 0; }
+    if (o.created_at >= month && o.status !== 'iptal' && o.status !== 'iade') { month_count += 1; month_revenue += Number(o.total) || 0; }
     if (o.status === 'teslim_edildi' && (o.satisfaction === 'memnun_degil' || o.satisfaction === 'cevaplandi')) unhappy += 1;
-    if (o.payment_status === 'bekleniyor' && o.status !== 'iptal' && o.status !== 'teslim_edildi') unpaid += 1;
+    if (o.payment_status === 'bekleniyor' && o.status !== 'iptal' && o.status !== 'teslim_edildi' && o.status !== 'iade') unpaid += 1;
   }
   const pending_messages = (await S().select({ table: 'messages', columns: ['id'], where: [eq('direction', 'out'), isIn('status', ['failed', 'pending'])], limit: 1, count: true })).count || 0;
   const unread = (await S().select({ table: 'messages', columns: ['id'], where: [eq('direction', 'in'), eq('is_read', 0)], limit: 1, count: true })).count || 0;

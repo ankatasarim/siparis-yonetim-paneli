@@ -2,7 +2,7 @@
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Copy, Truck, Check, XCircle, Lock, Clock, Smile, Frown, Send, MoreHorizontal, Pencil, Trash2, MessageSquare, ArrowRight, Package, CreditCard, Plus, Bell } from 'lucide-react';
+import { Copy, Truck, Check, XCircle, Lock, Clock, Smile, Frown, Send, MoreHorizontal, Pencil, Trash2, MessageSquare, ArrowRight, Package, CreditCard, Plus, Bell, RotateCcw } from 'lucide-react';
 import { api, copyText } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import { Modal, ConfirmDialog } from '@/components/Modal';
@@ -35,7 +35,7 @@ export function ShipmentCard({ order }: {
   const [payer, setPayer] = useState<ShippingPayer>(order.shipping_payer || 'gonderici');
   const [fee, setFee] = useState(String(order.shipping_fee || 0));
   const [dims, setDims] = useState({ w: '', l: '', h: '' });
-  const closed = order.status === 'teslim_edildi' || order.status === 'iptal';
+  const closed = ['teslim_edildi', 'iade', 'iptal'].includes(order.status);
   const fields = () => ({ desi, package_count: pkg, shipping_payer: payer, shipping_fee: fee });
 
   const calc = () => {
@@ -71,23 +71,26 @@ export function ShipmentCard({ order }: {
 export function StatusActions({ id, status, next }: { id: number; status: OrderStatus; next: OrderStatus[] }) {
   const { run, busy } = useAction();
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmReturn, setConfirmReturn] = useState(false);
   const labels: Partial<Record<OrderStatus, { label: string; icon: ReactNode; cls: string }>> = {
     hazirlaniyor: { label: 'Hazırlığa al', icon: <Clock className="h-3.5 w-3.5" />, cls: 'btn-primary' },
     hazirlandi: { label: 'Hazırlandı', icon: <Check className="h-3.5 w-3.5" />, cls: 'btn-primary' },
     kargoya_verildi: { label: 'Kargoya verildi', icon: <Truck className="h-3.5 w-3.5" />, cls: 'btn-primary' },
     teslim_edildi: { label: 'Teslim edildi', icon: <Check className="h-3.5 w-3.5" />, cls: 'btn-primary' },
+    iade: { label: 'İade işlemini kaydet', icon: <RotateCcw className="h-3.5 w-3.5" />, cls: 'btn-danger' },
     iptal: { label: 'İptal et', icon: <XCircle className="h-3.5 w-3.5" />, cls: 'btn-danger' },
   };
-  const items = next;
+  const items = status === 'teslim_edildi' ? [...new Set([...next, 'iade' as OrderStatus])] : next;
   if (!items.length) return <p className="text-sm text-neutral-500">Bu sipariş {STATUSES[status].label.toLowerCase()} durumunda; başka işlem yok.</p>;
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((s) => {
         const l = labels[s]!;
-        return <button key={s} disabled={busy} onClick={() => (s === 'iptal' ? setConfirmCancel(true) : run(() => api.post(`/api/orders/${id}/status`, { status: s }), 'Durum güncellendi'))} className={`btn btn-sm ${l.cls}`}>{l.icon}{l.label}</button>;
+        return <button key={s} disabled={busy} onClick={() => (s === 'iptal' ? setConfirmCancel(true) : s === 'iade' ? setConfirmReturn(true) : run(() => api.post(`/api/orders/${id}/status`, { status: s }), 'Durum güncellendi'))} className={`btn btn-sm ${l.cls}`}>{l.icon}{l.label}</button>;
       })}
       {(status === 'hazirlaniyor' || status === 'hazirlandi') && <p className="w-full text-xs text-neutral-500">Kargoya verme işlemini buradan kaydedebilirsiniz.</p>}
       <ConfirmDialog open={confirmCancel} text="Sipariş iptal edilsin mi? Bu işlem geri alınamaz." okLabel="İptal et" danger busy={busy} onCancel={() => setConfirmCancel(false)} onConfirm={async () => { const ok = await run(() => api.post(`/api/orders/${id}/status`, { status: 'iptal' }), 'Sipariş iptal edildi'); if (ok) setConfirmCancel(false); }} />
+      <ConfirmDialog open={confirmReturn} title="Ürün iadeyi onayla" text="Ürün iadeye geçti olarak işaretlenecek ve stok takibi olan ürünler depoya geri alınacak. İade, ödeme/geri ödeme tutarını otomatik olarak tahsil edilmiş gibi değiştirmez." okLabel="İadeyi kaydet" danger busy={busy} onCancel={() => setConfirmReturn(false)} onConfirm={async () => { const ok = await run(() => api.post(`/api/orders/${id}/status`, { status: 'iade', force: true, note: 'Müşteri ürünü iade etti' }), 'İade kaydedildi'); if (ok) setConfirmReturn(false); }} />
     </div>
   );
 }

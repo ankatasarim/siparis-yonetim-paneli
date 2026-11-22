@@ -176,6 +176,21 @@ export async function syncOrder(orderId: number, statusOverride?: string) {
     return;
   }
 
+  if (status === 'iade') {
+    for (const reservation of existing) {
+      if (reservation.state !== 'consumed') continue;
+      const p = await products.get(reservation.product_id);
+      if (!p) continue;
+      const variant = reservation.variant_id ? (await db.store().select<InventoryVariant>({ table: 'inventory_variants', where: [eq('id', reservation.variant_id)], limit: 1 })).rows[0] || null : null;
+      const qty = Number(reservation.quantity) || 0;
+      if (qty <= 0) continue;
+      await db.store().update(variant ? 'inventory_variants' : 'products', [eq('id', variant ? variant.id : p.id)], { stock_on_hand: amount((variant ? variant.stock_on_hand : p.stock_on_hand) + qty), updated_at: now() });
+      await db.store().update('inventory_reservations', [eq('id', reservation.id)], { state: 'released', quantity: 0, updated_at: now() });
+      await addMovement(p, 'return', qty, { variant, reference: `Sipariş #${order.order_no}`, note: 'İade edilen siparişin ürünü depoya geri alındı' });
+    }
+    return;
+  }
+
   if (!trackedStatus(status)) {
     for (const reservation of existing) {
       if (reservation.state !== 'reserved') continue;

@@ -1,4 +1,4 @@
-export type OrderStatus = 'yeni' | 'hazirlaniyor' | 'hazirlandi' | 'kargoya_verildi' | 'teslim_edildi' | 'iptal';
+export type OrderStatus = 'yeni' | 'hazirlaniyor' | 'hazirlandi' | 'kargoya_verildi' | 'teslim_edildi' | 'iade' | 'iptal';
 export type ShippingCompany = 'dhl' | 'hepsijet' | 'elden_teslim';
 export type PaymentStatus = 'bekleniyor' | 'alindi' | 'kapida_odeme';
 export type OrderTag = '' | 'acil' | 'oncelikli';

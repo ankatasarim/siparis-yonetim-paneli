@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, Check, Clock, Truck, XCircle } from 'lucide-react';
+import { ChevronDown, Check, Clock, Truck, XCircle, RotateCcw } from 'lucide-react';
 import { api } from '@/lib/client';
 import { useToast } from '@/components/Toast';
 import { StatusPill } from '@/components/Pills';
@@ -15,6 +15,7 @@ const ICONS: Partial<Record<OrderStatus, ReactNode>> = {
   kargoya_verildi: <Truck className="h-4 w-4 text-violet-600" />,
   teslim_edildi: <Check className="h-4 w-4 text-emerald-600" />,
   iptal: <XCircle className="h-4 w-4 text-red-600" />,
+  iade: <RotateCcw className="h-4 w-4 text-orange-600" />,
 };
 
 /** Listeden, detaya girmeden durum değiştirme menüsü. */
@@ -29,6 +30,7 @@ export function StatusMenu({ id, orderNo, status, shippingCompany, trackingNo }:
   const [tracking, setTracking] = useState('');
   const [company, setCompany] = useState<ShippingCompany>('dhl');
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmReturn, setConfirmReturn] = useState(false);
   const next = STATUSES[status].next;
 
   useEffect(() => {
@@ -55,6 +57,7 @@ export function StatusMenu({ id, orderNo, status, shippingCompany, trackingNo }:
       toast(`#${orderNo} → ${s === 'kargoya_verildi' && shipment?.company === 'elden_teslim' ? STATUSES.teslim_edildi.label : STATUSES[s].label}`, 'ok');
       setAskTracking(false);
       setConfirmCancel(false);
+      setConfirmReturn(false);
       router.refresh();
     } catch (e) { fail(e); }
     setBusy(false);
@@ -64,6 +67,7 @@ export function StatusMenu({ id, orderNo, status, shippingCompany, trackingNo }:
     setOpen(false);
     if (s === 'kargoya_verildi') { setCompany(shippingCompany || 'dhl'); setTracking(trackingNo || ''); setAskTracking(true); return; }
     if (s === 'iptal') { setConfirmCancel(true); return; }
+    if (s === 'iade') { setConfirmReturn(true); return; }
     apply(s);
   };
 
@@ -81,7 +85,7 @@ export function StatusMenu({ id, orderNo, status, shippingCompany, trackingNo }:
           <div className="fixed z-50 w-64 rounded-md border border-neutral-200 bg-white py-1 shadow-lg" style={{ top: pos.top, left: pos.left }} onClick={(e) => e.stopPropagation()}>
             <p className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-neutral-400">#{orderNo} · durumu değiştir</p>
             {next.map((s) => (
-              <button key={s} onClick={() => choose(s)} className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-neutral-50 ${s === 'iptal' ? 'text-red-600' : 'text-neutral-800'}`}>
+              <button key={s} onClick={() => choose(s)} className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-neutral-50 ${s === 'iptal' ? 'text-red-600' : s === 'iade' ? 'text-blue-600' : 'text-neutral-800'}`}>
                 {ICONS[s]}<span className="whitespace-nowrap">{STATUSES[s].label}</span>
                 {s === 'kargoya_verildi' && <span className="ml-auto text-[10px] text-neutral-400">kargo şirketi seçilir</span>}
               </button>
@@ -107,6 +111,7 @@ export function StatusMenu({ id, orderNo, status, shippingCompany, trackingNo }:
       </Modal>
 
       <ConfirmDialog open={confirmCancel} text={`#${orderNo} numaralı sipariş iptal edilsin mi?`} okLabel="İptal et" danger busy={busy} onCancel={() => setConfirmCancel(false)} onConfirm={() => apply('iptal')} />
+      <ConfirmDialog open={confirmReturn} text={`#${orderNo} numaralı sipariş iade edilsin mi?`} okLabel="İade et" danger busy={busy} onCancel={() => setConfirmReturn(false)} onConfirm={() => apply('iade')} />
     </>
   );
 }

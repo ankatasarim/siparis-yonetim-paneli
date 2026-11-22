@@ -32,8 +32,8 @@ export async function get(fromInput: string | null, toInput: string | null) {
     db.selectAll<AccountRow>({ table: 'account_transactions' }),
   ]);
 
-  const activeOrders = orders.filter((order) => order.status !== 'iptal');
-  const cancelled = orders.filter((order) => order.status === 'iptal');
+  const activeOrders = orders.filter((order) => order.status !== 'iptal' && order.status !== 'iade');
+  const returned = orders.filter((order) => order.status === 'iade');
   const amount = (n: unknown) => Number(n) || 0;
   const salesSubtotal = round2(activeOrders.reduce((sum, order) => sum + amount(order.subtotal), 0));
   const salesTotal = round2(activeOrders.reduce((sum, order) => sum + amount(order.total), 0));
@@ -97,7 +97,7 @@ export async function get(fromInput: string | null, toInput: string | null) {
 
   return {
     from, to,
-    orders: { count: activeOrders.length, cancelled: cancelled.length, avg: activeOrders.length ? round2(salesTotal / activeOrders.length) : 0, unpaidCount: unpaidOrders.length, unpaidAmount: round2(unpaidOrders.reduce((sum, order) => sum + amount(order.total), 0)) },
+    orders: { count: activeOrders.length, cancelled: 0, avg: activeOrders.length ? round2(salesTotal / activeOrders.length) : 0, unpaidCount: unpaidOrders.length, unpaidAmount: round2(unpaidOrders.reduce((sum, order) => sum + amount(order.total), 0)) },
     sales: { net: salesSubtotal, revenue: salesTotal, shipping: shippingTotal },
     cash: { orderCollections, accountCollections, manualIncome, income: recordedIncome, expenses, result: round2(recordedIncome - expenses) },
     receivable: round2(Math.max(0, receivableCharges - receivablePayments)),

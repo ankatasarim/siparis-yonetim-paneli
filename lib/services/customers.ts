@@ -50,7 +50,7 @@ export async function list({ q, limit = 200 }: { q?: string | null; limit?: numb
     const x = at(o.customer_id);
     x.count += 1;
     if (!x.last || o.created_at > x.last) x.last = o.created_at;
-    if (o.status !== 'iptal') x.spent += Number(o.total) || 0;
+    if (o.status !== 'iptal' && o.status !== 'iade') x.spent += Number(o.total) || 0;
   }
   for (const m of unread) at(m.customer_id).unread += 1;
   return custs
